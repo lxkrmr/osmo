@@ -31,12 +31,34 @@ Use this skill when you want a structured PR review process where the developer 
 
 ## Prerequisites
 
-- GitHub CLI authenticated:
-  ```bash
-  gh auth status
-  ```
 - In the target repository working directory.
 - IDE available (PyCharm/VSCode) for deep file navigation and chain tracing.
+
+### GH CLI Setup Quickstart
+
+1. Check GitHub CLI is installed:
+   ```bash
+   gh --version
+   ```
+2. Authenticate (interactive):
+   ```bash
+   gh auth login
+   ```
+3. Verify active auth/account:
+   ```bash
+   gh auth status
+   ```
+4. If auth is wrong/broken, re-login:
+   ```bash
+   gh auth logout -h github.com
+   gh auth login
+   ```
+
+Optional SSH verification (if using SSH for git operations):
+
+```bash
+ssh -T git@github.com
+```
 
 ## Intake (Context First)
 
