@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import shutil
 import urllib.error
@@ -22,23 +21,8 @@ def command_exists(name: str) -> bool:
     return shutil.which(name) is not None
 
 
-def resolve_project_dir(devkit_dir: Path, positional: str | None) -> Path | None:
-    if positional:
-        return Path(positional).expanduser()
-
-    env_val = os.environ.get("ODOO_REPO_PATH")
-    if env_val:
-        return Path(env_val).expanduser()
-
-    sibling = devkit_dir.parent / "erp"
-    if sibling.exists():
-        return sibling
-
-    cwd = Path.cwd()
-    if (cwd / "docker-compose.yml").exists():
-        return cwd
-
-    return None
+def resolve_project_dir(positional: str) -> Path:
+    return Path(positional).expanduser()
 
 
 def check_http(url: str, name: str) -> CheckResult:
@@ -155,17 +139,11 @@ def evaluate_skill_requirements(skill_name: str, project_dir: Path, manifest: di
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Doctor checks for Odoo devkit setup.")
-    parser.add_argument("project_repo_path", nargs="?", help="Path to Odoo project repo")
+    parser.add_argument("project_repo_path", help="Path to Odoo project repo")
     args = parser.parse_args()
 
     devkit_dir = Path(__file__).resolve().parent.parent
-    project_dir_raw = resolve_project_dir(devkit_dir, args.project_repo_path)
-    if not project_dir_raw:
-        print("Could not resolve Odoo project repo path.")
-        parser.print_help()
-        return 1
-
-    project_dir = project_dir_raw.expanduser().resolve()
+    project_dir = resolve_project_dir(args.project_repo_path).resolve()
     if not project_dir.exists() or not (project_dir / "docker-compose.yml").exists():
         print(f"Invalid Odoo project repo path: {project_dir}")
         return 1

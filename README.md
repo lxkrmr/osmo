@@ -49,9 +49,11 @@ The wizard can set up a local Python environment managed by `direnv`:
 ./pi-odoo-devkit.sh wizard /path/to/odoo-project
 ```
 
+`/path/to/odoo-project` is required.
+
 Wizard mode guides users through:
 - dependency checks,
-- project path confirmation,
+- project path validation,
 - skill selection (with descriptions and availability checks),
 - command selection,
 - optional browser-tools dependencies,
@@ -64,11 +66,6 @@ Non-interactive example:
 ./pi-odoo-devkit.sh wizard /path/to/odoo-project --yes --with-browser-tools --add-local-exclude --set-project-env
 ```
 
-Or using environment variable:
-
-```bash
-ODOO_REPO_PATH=/path/to/odoo-project ./pi-odoo-devkit.sh wizard
-```
 
 ## What wizard sets up
 

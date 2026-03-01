@@ -2,29 +2,13 @@
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
 import sys
 from pathlib import Path
 
 
-def resolve_project_dir(devkit_dir: Path, positional: str | None) -> Path | None:
-    if positional:
-        return Path(positional).expanduser()
-
-    env_val = os.environ.get("ODOO_REPO_PATH")
-    if env_val:
-        return Path(env_val).expanduser()
-
-    sibling = devkit_dir.parent / "erp"
-    if sibling.exists():
-        return sibling
-
-    cwd = Path.cwd()
-    if (cwd / "docker-compose.yml").exists():
-        return cwd
-
-    return None
+def resolve_project_dir(positional: str) -> Path:
+    return Path(positional).expanduser()
 
 
 def remove_local_exclude(project_dir: Path) -> str:
@@ -71,7 +55,7 @@ def prompt_yes_no(question: str, default_yes: bool = True) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Uninstall Odoo devkit links from a project repo safely.")
-    parser.add_argument("project_repo_path", nargs="?", help="Path to Odoo project repo")
+    parser.add_argument("project_repo_path", help="Path to Odoo project repo")
     parser.add_argument(
         "--remove-local-exclude",
         action="store_true",
@@ -89,14 +73,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    devkit_dir = Path(__file__).resolve().parent.parent
-    project_dir_raw = resolve_project_dir(devkit_dir, args.project_repo_path)
-    if not project_dir_raw:
-        print("Could not resolve Odoo project repo path.")
-        parser.print_help()
-        return 1
-
-    project_dir = project_dir_raw.expanduser().resolve()
+    project_dir = resolve_project_dir(args.project_repo_path).resolve()
     if not project_dir.exists():
         print(f"Project repo path does not exist: {project_dir}")
         return 1
