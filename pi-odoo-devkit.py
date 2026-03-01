@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import configparser
+import curses
 import glob
 import json
 import os
@@ -24,6 +25,14 @@ class SkillMeta:
     name: str
     path: Path
     description: str
+
+
+@dataclass
+class SkillStatus:
+    meta: SkillMeta
+    enabled: bool
+    available: bool
+    reason: str
 
 
 def command_exists(name: str) -> bool:
@@ -464,6 +473,7 @@ def current_enabled_names(target_dir: Path) -> set[str]:
 def default_selection(all_skills: list[SkillMeta], available_skill_names: set[str]) -> set[str]:
     skill_names = {s.name for s in all_skills}
     recommended = {
+        "dev-workbench",
         "local-db",
         "odoo-shell-debug",
         "odoo-addon-lifecycle",
@@ -625,9 +635,492 @@ def scan_content_hygiene(root: Path) -> tuple[str, str, str]:
     return ("content-hygiene", "PASS", "No obvious personal paths/company-specific identifiers found")
 
 
+def doctor_recommendations(results: list[tuple[str, str, str]], project_dir: Path) -> list[str]:
+    recs: list[str] = []
+    seen: set[str] = set()
+
+    def add(msg: str) -> None:
+        if msg not in seen:
+            seen.add(msg)
+            recs.append(msg)
+
+    for name, status, message in results:
+        if status == "PASS":
+            continue
+
+        if name == "tool:python3":
+            add("Install python3 and rerun doctor.")
+        elif name == "tool:docker":
+            add("Install/start Docker, then rerun doctor.")
+        elif name in {"tool:node", "tool:npm"}:
+            add("Install Node.js + npm if you use odoo-ui-check/browser-tools.")
+        elif name == "skills:shared-devkit":
+            add(f"Run setup: ./pi-odoo-devkit.py wizard \"{project_dir}\"")
+        elif name == "link:.pi/devkit":
+            add(f"Recreate project entrypoint: ./pi-odoo-devkit.py wizard \"{project_dir}\"")
+        elif name == "pi:legacy-tools":
+            add(f"Remove legacy artifacts: ./pi-odoo-devkit.py cleanup \"{project_dir}\" --all")
+        elif name == "skills:collisions":
+            add(f"Clean collisions: ./pi-odoo-devkit.py cleanup \"{project_dir}\" --all, then rerun setup.")
+        elif name == "skills:invalid-artifacts":
+            add(f"Archive invalid artifacts via setup: ./pi-odoo-devkit.py wizard \"{project_dir}\"")
+        elif name.startswith("skill:") and name.endswith(":deps"):
+            add(f"Fix skill prerequisites for {name.split(':')[1]}: {message}")
+        elif name == "odoo:web":
+            add("Start Odoo services (e.g. docker compose up -d) and retry.")
+        elif name == "browser:cdp":
+            add("Start Chrome with remote debugging on :9222 if you need UI/browser skills.")
+        elif name == "content-hygiene":
+            add("Review flagged files and replace personal/company-specific hardcoded content.")
+
+    return recs
+
+
+def collect_skill_statuses(root: Path, project_dir: Path) -> list[SkillStatus]:
+    all_skills = discover_skills(root)
+    manifest = load_skill_manifest(root)
+    enabled = current_enabled_names(project_dir / ".pi" / "skills" / "shared-devkit")
+
+    out: list[SkillStatus] = []
+    for s in all_skills:
+        ok, reason = evaluate_skill_requirements(s.name, project_dir, manifest)
+        out.append(SkillStatus(meta=s, enabled=s.name in enabled, available=ok, reason=reason))
+    return out
+
+
+def enable_skill_for_project(root: Path, project_dir: Path, name: str) -> list[str]:
+    src = root / "skills" / name
+    marker = src / "SKILL.md"
+    if not marker.exists():
+        return [f"Skill not found: {name}"]
+
+    manifest = load_skill_manifest(root)
+    ok, reason = evaluate_skill_requirements(name, project_dir, manifest)
+    if not ok:
+        return [f"Cannot enable {name}: {reason}"]
+
+    dst = project_dir / ".pi" / "skills" / "shared-devkit" / name
+    dst.parent.mkdir(parents=True, exist_ok=True)
+
+    if dst.exists() or dst.is_symlink():
+        if dst.is_dir() and not dst.is_symlink():
+            shutil.rmtree(dst)
+        else:
+            dst.unlink()
+
+    dst.symlink_to(src)
+    messages = [f"Enabled skill: {name}"]
+    messages.extend(sanitize_project_skills(project_dir, {name}))
+    return messages
+
+
+def disable_skill_for_project(project_dir: Path, name: str) -> list[str]:
+    dst = project_dir / ".pi" / "skills" / "shared-devkit" / name
+    if dst.exists() or dst.is_symlink():
+        if dst.is_dir() and not dst.is_symlink():
+            shutil.rmtree(dst)
+        else:
+            dst.unlink()
+        return [f"Disabled skill: {name}"]
+    return [f"Skill already disabled: {name}"]
+
+
+def setup_project_quick(root: Path, project_dir: Path) -> list[str]:
+    messages: list[str] = []
+
+    all_skills = discover_skills(root)
+    manifest = load_skill_manifest(root)
+    availability: dict[str, tuple[bool, str]] = {}
+    for s in all_skills:
+        availability[s.name] = evaluate_skill_requirements(s.name, project_dir, manifest)
+
+    shared_skills_dir = project_dir / ".pi" / "skills" / "shared-devkit"
+    current_skills = current_enabled_names(shared_skills_dir)
+    available_skill_names = {n for n, (ok, _) in availability.items() if ok}
+
+    if current_skills:
+        selected_skills = {n for n in current_skills if availability.get(n, (False, ""))[0]}
+        messages.append("Keeping current enabled skills.")
+    else:
+        selected_skills = default_selection(all_skills, available_skill_names)
+        messages.append("No skills enabled yet: applying recommended defaults.")
+
+    (project_dir / ".pi" / "skills").mkdir(parents=True, exist_ok=True)
+
+    skill_map = {
+        s.name: s.path
+        for s in all_skills
+        if s.name in selected_skills and availability.get(s.name, (True, ""))[0]
+    }
+    messages.extend(sync_symlink_set(shared_skills_dir, skill_map))
+
+    local_devkit_link = project_dir / ".pi" / "devkit"
+    target = root / "pi-odoo-devkit.py"
+    if local_devkit_link.exists() or local_devkit_link.is_symlink():
+        if not (local_devkit_link.is_symlink() and local_devkit_link.resolve() == target.resolve()):
+            local_devkit_link.unlink()
+            local_devkit_link.symlink_to(target)
+            messages.append(f"Updated project entrypoint: {local_devkit_link}")
+    else:
+        local_devkit_link.symlink_to(target)
+        messages.append(f"Created project entrypoint: {local_devkit_link}")
+
+    messages.extend(sanitize_project_skills(project_dir, set(skill_map.keys())))
+    messages.extend(migrate_legacy_tools(project_dir))
+    notes_path = write_local_agent_notes(project_dir)
+    messages.append(f"Updated local notes: {notes_path}")
+    messages.append(ensure_local_exclude(project_dir))
+
+    if "odoo-ui-check" in selected_skills:
+        messages.extend(install_browser_tools(root))
+
+    return messages
+
+
+def cleanup_project_all(project_dir: Path, remove_local_exclude: bool = False) -> list[str]:
+    skills_dir = project_dir / ".pi" / "skills" / "shared-devkit"
+    local_devkit = project_dir / ".pi" / "devkit"
+    notes = project_dir / ".pi" / "DEVKIT_AGENT_NOTES.md"
+    legacy_tools = project_dir / ".pi" / "tools"
+    legacy_skill_backup = project_dir / ".pi" / "skills" / "_disabled-by-devkit"
+    devkit_backups = project_dir / ".pi" / "_devkit-backups"
+    legacy_tools_backup = project_dir / ".pi" / "_legacy-tools-disabled"
+
+    actions: list[str] = []
+
+    if skills_dir.exists():
+        if skills_dir.is_dir() and not skills_dir.is_symlink():
+            shutil.rmtree(skills_dir)
+            actions.append(f"Removed dir: {skills_dir}")
+        else:
+            skills_dir.unlink()
+            actions.append(f"Removed: {skills_dir}")
+
+    if local_devkit.exists() or local_devkit.is_symlink():
+        local_devkit.unlink()
+        actions.append(f"Removed: {local_devkit}")
+
+    if notes.exists():
+        text = notes.read_text(encoding="utf-8")
+        if "managed-by: devkit installer" in text:
+            notes.unlink()
+            actions.append(f"Removed: {notes}")
+
+    if legacy_tools.exists():
+        shutil.rmtree(legacy_tools)
+        actions.append(f"Removed dir: {legacy_tools}")
+
+    for p in [legacy_skill_backup, devkit_backups, legacy_tools_backup]:
+        if p.exists():
+            if p.is_dir() and not p.is_symlink():
+                shutil.rmtree(p)
+                actions.append(f"Removed dir: {p}")
+            else:
+                p.unlink()
+                actions.append(f"Removed: {p}")
+
+    if remove_local_exclude:
+        actions.append(remove_local_exclude_entry(project_dir))
+
+    if not actions:
+        actions.append("Nothing to remove (project already clean).")
+
+    return actions
+
+
+def _project_path_for_ui(root: Path, project_repo_path: Path | None) -> Path:
+    if project_repo_path is not None:
+        project_dir = project_repo_path.expanduser().resolve()
+        check_project_repo(project_dir)
+        return project_dir
+
+    saved = get_saved_project_path(root)
+    if saved:
+        try:
+            check_project_repo(saved)
+            return saved
+        except click.ClickException:
+            pass
+
+    return prompt_project_repo_path(root)
+
+
+def run_tui(root: Path, project_dir: Path) -> None:
+    def _app(stdscr: curses.window) -> None:
+        curses.curs_set(0)
+        curses.start_color()
+        curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_CYAN, -1)   # title
+        curses.init_pair(2, curses.COLOR_GREEN, -1)  # enabled
+        curses.init_pair(3, curses.COLOR_YELLOW, -1) # available
+        curses.init_pair(4, curses.COLOR_RED, -1)    # unavailable
+        curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_BLUE)  # selection
+        curses.init_pair(6, curses.COLOR_MAGENTA, -1)  # accent
+
+        selected_idx = 0
+        scroll = 0
+        messages = ["Ready. Use ↑/↓ and Enter."]
+
+        def log(msgs: list[str] | str) -> None:
+            nonlocal messages
+            if isinstance(msgs, str):
+                msgs = [msgs]
+
+            normalized: list[str] = []
+            for msg in msgs:
+                s = msg.strip()
+                if not s:
+                    continue
+                if s.lower().startswith(("cannot", "missing", "error", "failed")):
+                    normalized.append(f"⚠ {s}")
+                elif s.lower().startswith(("enabled", "disabled", "created", "updated", "linked", "installed", "added", "removed")):
+                    normalized.append(f"✓ {s}")
+                else:
+                    normalized.append(s)
+
+            messages.extend(normalized)
+            messages = messages[-12:]
+
+        while True:
+            statuses = collect_skill_statuses(root, project_dir)
+            if statuses:
+                selected_idx = max(0, min(selected_idx, len(statuses) - 1))
+            else:
+                selected_idx = 0
+
+            stdscr.erase()
+            h, w = stdscr.getmaxyx()
+
+            if h < 18 or w < 72:
+                stdscr.addstr(1, 2, "pi-odoo-devkit")
+                stdscr.addstr(3, 2, f"Terminal too small ({w}x{h}).")
+                stdscr.addstr(4, 2, "Please resize to at least 72x18.")
+                stdscr.addstr(6, 2, "Press q to quit or r to retry.")
+                stdscr.refresh()
+                key = stdscr.getch()
+                if key in (ord("q"), 27):
+                    return
+                continue
+
+            def put(y: int, x: int, text: str, attr: int = 0) -> None:
+                if y < 0 or y >= h or x < 0 or x >= w:
+                    return
+                width = max(0, w - x - 1)
+                if width <= 0:
+                    return
+                try:
+                    stdscr.addnstr(y, x, text, width, attr)
+                except curses.error:
+                    pass
+
+            def hline(y: int, x: int, width: int) -> None:
+                if width <= 0:
+                    return
+                put(y, x, "─" * width, curses.color_pair(1))
+
+            def box(y: int, x: int, bh: int, bw: int, title: str = "") -> None:
+                if bh < 3 or bw < 4:
+                    return
+                put(y, x, "┌" + ("─" * (bw - 2)) + "┐", curses.color_pair(1))
+                for yy in range(y + 1, y + bh - 1):
+                    put(yy, x, "│", curses.color_pair(1))
+                    put(yy, x + bw - 1, "│", curses.color_pair(1))
+                put(y + bh - 1, x, "└" + ("─" * (bw - 2)) + "┘", curses.color_pair(1))
+                if title:
+                    put(y, x + 2, f" {title} ", curses.color_pair(6) | curses.A_BOLD)
+
+            total = len(statuses)
+            enabled_count = sum(1 for s in statuses if s.enabled)
+            available_count = sum(1 for s in statuses if s.available)
+            unavailable_count = total - available_count
+
+            title = "🧰 pi-odoo-devkit"
+            stats = f"enabled {enabled_count}/{total}  available {available_count}  unavailable {unavailable_count}"
+            legend = "● enabled   ○ available   ✕ unavailable"
+            mode = "STACK"
+            put(0, 2, title, curses.color_pair(1) | curses.A_BOLD)
+            put(0, 24, f"[{mode}]", curses.color_pair(6) | curses.A_BOLD)
+            put(0, max(2, w - len(stats) - 2), stats, curses.color_pair(1))
+            put(1, 2, f"project: {project_dir}")
+            put(1, max(2, w - len(legend) - 2), legend, curses.color_pair(6))
+            hline(2, 1, max(0, w - 2))
+
+            body_top = 3
+            panel_x = 1
+            panel_w = max(10, w - 2)
+
+            # Layout: Skills (top), Details (middle), Activity (bottom)
+            activity_h = max(6, min(10, h // 4))
+            activity_top = h - activity_h - 1
+            action_y = activity_top - 1
+
+            skills_h = min(max(8, total + 3), 12)
+            details_top = body_top + skills_h
+            details_h = action_y - details_top
+
+            if details_h < 6:
+                shrink = 6 - details_h
+                skills_h = max(6, skills_h - shrink)
+                details_top = body_top + skills_h
+                details_h = max(4, action_y - details_top)
+
+            position = f"{selected_idx + 1}/{total}" if total else "0/0"
+            box(body_top, panel_x, skills_h, panel_w, f"Skills {position}")
+
+            list_top = body_top + 1
+            list_height = max(3, skills_h - 2)
+            if total > list_height:
+                put(body_top, panel_x + panel_w - 6, "↕", curses.color_pair(6) | curses.A_BOLD)
+
+            if statuses:
+                if selected_idx < scroll:
+                    scroll = selected_idx
+                if selected_idx >= scroll + list_height:
+                    scroll = selected_idx - list_height + 1
+
+                visible = statuses[scroll : scroll + list_height]
+                for row_i, st in enumerate(visible):
+                    idx = scroll + row_i
+                    y = list_top + row_i
+
+                    if st.enabled:
+                        icon, color = "●", curses.color_pair(2)
+                    elif st.available:
+                        icon, color = "○", curses.color_pair(3)
+                    else:
+                        icon, color = "✕", curses.color_pair(4)
+
+                    label = f" {icon} {st.meta.name}"
+                    attr = (curses.color_pair(5) | curses.A_BOLD) if idx == selected_idx else color
+                    put(y, panel_x + 1, label, attr)
+            else:
+                put(list_top, panel_x + 1, "No skills found.")
+
+            box(details_top, panel_x, details_h, panel_w, "Details")
+            if statuses:
+                selected = statuses[selected_idx]
+                y = details_top + 1
+                content_x = panel_x + 2
+                content_w = max(20, panel_w - 4)
+                put(y, content_x, f"Skill: {selected.meta.name}", curses.A_BOLD)
+                y += 1
+
+                state = "enabled" if selected.enabled else ("available" if selected.available else "unavailable")
+                state_color = curses.color_pair(2) if selected.enabled else (curses.color_pair(3) if selected.available else curses.color_pair(4))
+                put(y, content_x, f"State: {state}", state_color | curses.A_BOLD)
+                y += 1
+                put(y, content_x, f"Path: skills/{selected.meta.name}")
+                y += 2
+
+                put(y, content_x, "Description:", curses.A_BOLD)
+                y += 1
+                for line in textwrap.wrap(selected.meta.description, width=content_w):
+                    if y >= details_top + details_h - 1:
+                        break
+                    put(y, content_x, line)
+                    y += 1
+
+                if (not selected.available) and selected.reason and y < details_top + details_h - 1:
+                    y += 1
+                    put(y, content_x, "Why unavailable:", curses.color_pair(4) | curses.A_BOLD)
+                    y += 1
+                    for line in textwrap.wrap(selected.reason, width=content_w):
+                        if y >= details_top + details_h - 1:
+                            break
+                        put(y, content_x, line, curses.color_pair(4))
+                        y += 1
+
+            put(action_y, 2, "[Enter] toggle  [e] enable  [d] disable  [s] setup  [c] cleanup  [x] doctor  [X] full doctor  [r] refresh  [q] quit", curses.color_pair(6))
+
+            box(activity_top, 1, activity_h, max(10, w - 2), "Activity")
+            recent_lines = messages[-max(1, activity_h - 2):]
+            for i, line in enumerate(recent_lines):
+                put(activity_top + 1 + i, 2, f"• {line}")
+
+            stdscr.refresh()
+            key = stdscr.getch()
+
+            if key in (ord("q"), 27):
+                return
+            if key in (curses.KEY_UP, ord("k")):
+                selected_idx = max(0, selected_idx - 1)
+                continue
+            if key in (curses.KEY_DOWN, ord("j")):
+                selected_idx = min(len(statuses) - 1 if statuses else 0, selected_idx + 1)
+                continue
+            if key in (ord("g"),):
+                selected_idx = 0
+                continue
+            if key in (ord("G"),):
+                selected_idx = max(0, len(statuses) - 1)
+                continue
+            if key in (ord("r"),):
+                log("Refreshed.")
+                continue
+
+            if not statuses:
+                continue
+
+            selected = statuses[selected_idx]
+
+            if key in (ord("\n"), curses.KEY_ENTER, ord(" ")):
+                if selected.enabled:
+                    log(disable_skill_for_project(project_dir, selected.meta.name))
+                else:
+                    log(enable_skill_for_project(root, project_dir, selected.meta.name))
+            elif key == ord("e"):
+                log(enable_skill_for_project(root, project_dir, selected.meta.name))
+            elif key == ord("d"):
+                log(disable_skill_for_project(project_dir, selected.meta.name))
+            elif key == ord("s"):
+                log(setup_project_quick(root, project_dir))
+            elif key == ord("c"):
+                put(h - 1, 2, "Cleanup project devkit artifacts? [y/N]")
+                stdscr.refresh()
+                confirm = stdscr.getch()
+                if confirm in (ord("y"), ord("Y")):
+                    log(cleanup_project_all(project_dir))
+                else:
+                    log("Cleanup cancelled.")
+            elif key == ord("x"):
+                results, fail_count, warn_count = run_doctor_checks(root, project_dir)
+                if fail_count == 0 and warn_count == 0:
+                    log("✓ Doctor: all checks passed.")
+                else:
+                    log(f"⚠ Doctor: FAIL {fail_count}, WARN {warn_count}")
+                    recs = doctor_recommendations(results, project_dir)
+                    for rec in recs[:3]:
+                        log(f"→ {rec}")
+                    if len(recs) > 3:
+                        log(f"… {len(recs) - 3} more suggestions (press X for full report)")
+            elif key == ord("X"):
+                curses.def_prog_mode()
+                curses.endwin()
+                try:
+                    subprocess.call([sys.executable, str(root / "pi-odoo-devkit.py"), "doctor", str(project_dir)])
+                    input("\nPress Enter to return to devkit UI...")
+                finally:
+                    curses.reset_prog_mode()
+                    stdscr.refresh()
+
+    curses.wrapper(_app)
+
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli() -> None:
     """Pi Odoo Devkit CLI."""
+
+
+@cli.command("ui")
+@click.argument("project_repo_path", required=False, type=click.Path(path_type=Path))
+def ui_cmd(project_repo_path: Path | None) -> None:
+    """Launch interactive devkit TUI."""
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        raise click.ClickException("TUI requires an interactive terminal.")
+
+    root = devkit_root()
+    project_dir = _project_path_for_ui(root, project_repo_path)
+    run_tui(root, project_dir)
 
 
 @cli.command()
@@ -835,21 +1328,7 @@ def wizard(
     print_agent_doc_guidance(project_dir, notes_path)
 
 
-@cli.command()
-@click.argument("project_repo_path", required=False, type=click.Path(path_type=Path))
-def doctor(project_repo_path: Path | None) -> None:
-    """Run health and hygiene checks."""
-    root = devkit_root()
-
-    interactive = sys.stdin.isatty()
-    if project_repo_path is None:
-        if not interactive:
-            raise click.ClickException("PROJECT_REPO_PATH is required in non-interactive mode.")
-        project_repo_path = prompt_project_repo_path(root)
-
-    project_dir = project_repo_path.expanduser().resolve()
-    check_project_repo(project_dir)
-
+def run_doctor_checks(root: Path, project_dir: Path) -> tuple[list[tuple[str, str, str]], int, int]:
     results: list[tuple[str, str, str]] = []
 
     for tool, required in [
@@ -888,7 +1367,6 @@ def doctor(project_repo_path: Path | None) -> None:
     else:
         results.append(("pi:legacy-tools", "PASS", "no legacy .pi/tools directory"))
 
-    # collision + invalid skill artifacts
     root_skills = project_dir / ".pi" / "skills"
     if root_skills.exists():
         collisions = []
@@ -925,21 +1403,43 @@ def doctor(project_repo_path: Path | None) -> None:
     results.append(check_http("http://localhost:9222/json/version", "browser:cdp"))
     results.append(scan_content_hygiene(root))
 
+    fail_count = sum(1 for _, status, _ in results if status == "FAIL")
+    warn_count = sum(1 for _, status, _ in results if status == "WARN")
+    return results, fail_count, warn_count
+
+
+@cli.command()
+@click.argument("project_repo_path", required=False, type=click.Path(path_type=Path))
+def doctor(project_repo_path: Path | None) -> None:
+    """Run health and hygiene checks."""
+    root = devkit_root()
+
+    interactive = sys.stdin.isatty()
+    if project_repo_path is None:
+        if not interactive:
+            raise click.ClickException("PROJECT_REPO_PATH is required in non-interactive mode.")
+        project_repo_path = prompt_project_repo_path(root)
+
+    project_dir = project_repo_path.expanduser().resolve()
+    check_project_repo(project_dir)
+
+    results, fail_count, warn_count = run_doctor_checks(root, project_dir)
+
     click.echo(f"Odoo devkit doctor report\n- devkit: {root}\n- project: {project_dir}\n")
 
-    fail_count = 0
-    warn_count = 0
     for name, status, message in results:
         icon = "✅" if status == "PASS" else ("⚠️" if status == "WARN" else "❌")
         click.echo(f"{icon} [{status}] {name}: {message}")
-        if status == "FAIL":
-            fail_count += 1
-        elif status == "WARN":
-            warn_count += 1
 
     click.echo("\nSummary:")
     click.echo(f"- FAIL: {fail_count}")
     click.echo(f"- WARN: {warn_count}")
+
+    recs = doctor_recommendations(results, project_dir)
+    if recs:
+        click.echo("\nWhat to do next:")
+        for i, rec in enumerate(recs, start=1):
+            click.echo(f"{i}. {rec}")
 
     if fail_count:
         raise SystemExit(1)
@@ -1249,4 +1749,13 @@ def lint(ctx: click.Context) -> None:
 
 
 if __name__ == "__main__":
-    cli()
+    if len(sys.argv) == 1 and sys.stdin.isatty() and sys.stdout.isatty():
+        try:
+            root = devkit_root()
+            project_dir = _project_path_for_ui(root, None)
+            run_tui(root, project_dir)
+        except click.ClickException as e:
+            click.echo(e.format_message(), err=True)
+            raise SystemExit(1)
+    else:
+        cli()
