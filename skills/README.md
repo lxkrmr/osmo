@@ -2,6 +2,7 @@
 
 This devkit currently exposes shared Odoo development skills, including:
 
+- `dev-workbench`
 - `local-db`
 - `odoo-addon-lifecycle`
 - `odoo-shell-debug`
