@@ -1,102 +1,70 @@
 ---
 name: odoo-ui-check
-description: Check local Odoo UI behavior in Odoo dev using browser-tools with a safe, repeatable workflow (read-only by default).
+description: Check local Odoo UI behavior with browser-tools in a simple, safe, repeatable way.
 ---
 
 # Odoo UI Check (Local Odoo)
 
-_This skill follows `templates/SKILL.md` conventions._
+Use this skill when you need to verify behavior in local Odoo UI (`http://localhost:8069`).
 
-Use this skill when asked to verify behavior in the local Odoo web UI (`http://localhost:8069`) instead of only DB/ORM inspection.
-
-This skill builds on `browser-tools` and is focused on Odoo-specific checks.
-
-## When This Skill Is Appropriate
-
-- Verify what is actually visible/clickable in Odoo UI.
-- Confirm view state differences (list/form/kanban), buttons, labels, domain effects.
-- Validate company/context-dependent UI behavior.
-
-## Critical Limits (Read Before Use)
-
-- UI checks can be flaky if session/company context is wrong.
-- DOM checks do **not** replace business-logic validation (use `odoo-shell-debug` for that).
-- Do not infer DB truth from UI alone (cross-check with `local-db` when needed).
-- Avoid side-effect actions (create/post/validate/send/delete) unless explicitly requested.
+This skill uses the browser JS tooling adapted from Mario Zechner's `pi-skills` project:
+https://github.com/badlogic/pi-skills
 
 ## Prerequisites
 
-1. Start local services:
+1. Start local stack:
    ```bash
    docker compose up -d
    ```
 2. Ensure Odoo is reachable:
    - `http://localhost:8069`
-3. Ensure browser-tools dependencies are installed (from devkit root):
+3. Ensure browser-tools deps are installed (tooling lives in `skills/browser-tools/browser-tools`):
    ```bash
    ./pi-odoo-devkit.py wizard /path/to/odoo-project --yes --with-browser-tools
    ```
-4. Ensure browser-tools CDP is reachable:
+4. Ensure CDP is reachable:
    ```bash
    curl -s http://localhost:9222/json/version
    ```
 
-## Session Strategy
+## Minimal Workflow
 
-- Default: start browser with fresh profile.
-- Use profile mode only when login/session persistence is needed.
-- Before checking behavior, confirm:
-  - logged-in user,
-  - active company,
-  - target database/environment (local dev only).
+1. Open target Odoo page.
+2. Confirm context: correct user + company.
+3. Check expected UI state (buttons/fields/labels/visibility).
+4. Do minimal interaction needed.
+5. Re-check expected result.
+6. Report pass/fail and observed vs expected.
 
-## Standard Verification Workflow
+## Rules
 
-1. Open target page in Odoo UI.
-2. Confirm context (user + active company).
-3. Inspect DOM state (labels, buttons, values, row counts, visibility).
-4. Perform minimal navigation/interactions required by request.
-5. Re-check expected state.
-6. Screenshot only on explicit request.
+- Prefer DOM checks over screenshots.
+- Screenshots only on explicit user request.
+- Avoid side effects (create/post/delete) unless requested.
+- If UI result is ambiguous, cross-check with:
+  - `odoo-shell-debug`
+  - `local-db`
 
-## Odoo-Oriented DOM Checks (Examples)
+## Useful DOM snippets
 
-Use browser-tools eval to extract reliable state in one call.
-
-### Basic page context
+### Page context
 
 ```javascript
 (function () {
   return {
     title: document.title,
     breadcrumb: Array.from(document.querySelectorAll('.breadcrumb-item, .o_breadcrumb li')).map(e => e.textContent.trim()).filter(Boolean),
-    hasModal: !!document.querySelector('.modal.show, .o_dialog_container .modal'),
   };
 })()
 ```
 
-### Active company (top bar heuristic)
-
-```javascript
-(function () {
-  const candidates = Array.from(document.querySelectorAll('[data-menu], .o_switch_company_menu, .dropdown-toggle, .o_navbar *'))
-    .map(e => e.textContent?.trim())
-    .filter(Boolean)
-    .slice(0, 40);
-  return { candidates };
-})()
-```
-
-(Company selector markup varies by Odoo/enterprise theme; verify with visible UI text.)
-
-### Visible primary actions/buttons
+### Visible action buttons
 
 ```javascript
 (function () {
   return Array.from(document.querySelectorAll('button, a.btn, .o_form_button_save, .o_list_button_add'))
     .map(e => ({
       text: (e.textContent || '').trim(),
-      classes: e.className,
       disabled: !!e.disabled || e.classList.contains('disabled'),
       visible: !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length),
     }))
@@ -105,42 +73,14 @@ Use browser-tools eval to extract reliable state in one call.
 })()
 ```
 
-## Determinism Rules
-
-- Prefer DOM assertions over visual interpretation.
-- Batch reads in single eval calls.
-- After clicks/navigation, wait briefly and re-check expected selectors.
-- If state is inconsistent, reload page and re-run checks once before concluding.
-
-## Escalation Path (Important)
-
-If UI and backend seem inconsistent:
-
-1. Re-check UI context (company/user/session).
-2. Verify via `odoo-shell-debug` (ORM state).
-3. Verify via `local-db` (raw persisted state).
-4. Report mismatch explicitly instead of guessing.
-
 ## Troubleshooting
 
-- **Login loop / unexpected user**
-  - Restart browser with fresh profile; log in again.
-- **Wrong company behavior**
-  - Switch company in UI and re-run checks.
 - **CDP not reachable**
-  - Restart browser-tools Chrome and verify `:9222`.
-- **Selectors unstable**
-  - Use browser element picker and avoid brittle deep selectors.
-
-## Reporting Checklist
-
-When finishing UI checks, report:
-
-- exact page/menu visited,
-- user/company context used,
-- what was observed,
-- what was expected,
-- whether cross-check with shell/DB was performed.
+  - restart browser-tools Chrome and retry `curl` check.
+- **Wrong user/company behavior**
+  - re-login / switch company and re-run check.
+- **Flaky selector**
+  - use browser element picker.
 
 ## Credential Hygiene
 
