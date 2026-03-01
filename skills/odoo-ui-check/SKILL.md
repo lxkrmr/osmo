@@ -1,6 +1,6 @@
 ---
 name: odoo-ui-check
-description: Check local Odoo UI behavior with browser-tools in a simple, safe, repeatable way.
+description: Check local Odoo UI in Chromium via Chrome DevTools Protocol (browser-tools), so the agent can inspect and validate UI behavior reliably.
 ---
 
 # Odoo UI Check (Local Odoo)
@@ -27,9 +27,30 @@ https://github.com/badlogic/pi-skills
    curl -s http://localhost:9222/json/version
    ```
 
+## How browser access works
+
+This skill opens Odoo in Chromium with Chrome DevTools Protocol (CDP) enabled on `:9222`.
+That lets the browser JS helpers inspect and interact with the page deterministically.
+
+Typical start commands (from `skills/browser-tools/browser-tools`):
+
+```bash
+./browser-start.js
+./browser-nav.js http://localhost:8069
+```
+
+After Chromium is open, the user can:
+- log in manually,
+- navigate to the target menu/view,
+- switch company/user context,
+- ask for a concrete UI check.
+
+Then the skill can run DOM checks (`browser-eval.js`), guided picker (`browser-pick.js`),
+and screenshot (`browser-screenshot.js`) only when explicitly requested.
+
 ## Minimal Workflow
 
-1. Open target Odoo page.
+1. Open target Odoo page in Chromium.
 2. Confirm context: correct user + company.
 3. Check expected UI state (buttons/fields/labels/visibility).
 4. Do minimal interaction needed.

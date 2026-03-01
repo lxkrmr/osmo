@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import textwrap
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -44,8 +45,62 @@ def check_project_repo(project_dir: Path) -> None:
         raise click.ClickException(f"Not an Odoo project repo (missing docker-compose.yml): {project_dir}")
 
 
-def prompt_project_repo_path() -> Path:
-    """Prompt for project path with basic TAB filesystem completion when readline is available."""
+def _envrc_local_path(root: Path) -> Path:
+    return root / ".envrc.local"
+
+
+def get_saved_project_path(root: Path) -> Path | None:
+    env_val = os.environ.get("ODOO_REPO_PATH")
+    if env_val:
+        return Path(env_val).expanduser().resolve()
+
+    envrc_local = _envrc_local_path(root)
+    if not envrc_local.exists():
+        return None
+
+    try:
+        text = envrc_local.read_text(encoding="utf-8")
+    except Exception:
+        return None
+
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        m = re.match(r'^export\s+ODOO_REPO_PATH\s*=\s*"?(.*?)"?\s*$', s)
+        if m and m.group(1).strip():
+            return Path(m.group(1).strip()).expanduser().resolve()
+
+    return None
+
+
+def save_project_path(root: Path, project_dir: Path) -> None:
+    envrc_local = _envrc_local_path(root)
+    envrc_local.write_text(f'export ODOO_REPO_PATH="{project_dir}"\n', encoding="utf-8")
+
+
+def clear_saved_project_path(root: Path) -> None:
+    envrc_local = _envrc_local_path(root)
+    if envrc_local.exists():
+        envrc_local.unlink()
+
+
+def prompt_project_repo_path(root: Path) -> Path:
+    """Prompt for project path with TAB completion, and optional save/reset of default path."""
+
+    saved = get_saved_project_path(root)
+    if saved:
+        try:
+            check_project_repo(saved)
+            click.echo(f"Saved project path: {saved}")
+            if click.confirm("Use this path?", default=True):
+                return saved
+            if click.confirm("Reset saved path?", default=False):
+                clear_saved_project_path(root)
+        except click.ClickException:
+            click.echo(f"Saved project path is invalid: {saved}")
+            if click.confirm("Reset saved path?", default=True):
+                clear_saved_project_path(root)
 
     readline = None
     try:
@@ -64,7 +119,6 @@ def prompt_project_repo_path() -> Path:
         is_libedit = "libedit" in (getattr(readline, "__doc__", "") or "").lower()
 
         def _normalize_prefix(text: str) -> tuple[str, str]:
-            # Keep user-visible prefix (~ or absolute), and an expanded filesystem prefix for glob.
             raw = text or ""
             if raw.startswith("~"):
                 return raw, os.path.expanduser(raw)
@@ -82,8 +136,6 @@ def prompt_project_repo_path() -> Path:
                         display = "~" + display[len(home):]
                 if os.path.isdir(m):
                     display += "/"
-                # readline expects escaped spaces in completion candidates
-                display = display.replace(" ", "\\ ")
                 out.append(display)
             if state < len(out):
                 return out[state]
@@ -106,6 +158,8 @@ def prompt_project_repo_path() -> Path:
             p = Path(raw).expanduser().resolve()
             try:
                 check_project_repo(p)
+                if click.confirm("Save as default project path for next runs?", default=True):
+                    save_project_path(root, p)
                 return p
             except click.ClickException as e:
                 click.echo(f"{e.format_message()}")
@@ -600,13 +654,14 @@ def wizard(
     if project_repo_path is None:
         if not interactive:
             raise click.ClickException("PROJECT_REPO_PATH is required in non-interactive mode.")
-        project_repo_path = prompt_project_repo_path()
+        project_repo_path = prompt_project_repo_path(root)
 
     project_dir = project_repo_path.expanduser().resolve()
     check_project_repo(project_dir)
 
     if interactive:
         click.echo("Welcome to the Odoo Devkit setup wizard 👋")
+        click.echo("This setup will create a project command at .pi/devkit.")
         click.echo("No changes are written until final confirmation.")
         click.echo()
 
@@ -635,45 +690,76 @@ def wizard(
 
     if interactive:
         click.echo("[skills selection]")
+        term_width = shutil.get_terminal_size(fallback=(100, 24)).columns
+        wrap_width = max(50, term_width - 8)
+
         for s in all_skills:
             ok, reason = availability.get(s.name, (True, ""))
+            click.echo(f"\n  {'⛔' if not ok else '•'} {s.name}")
+            desc = textwrap.fill(
+                s.description,
+                width=wrap_width,
+                initial_indent="      ",
+                subsequent_indent="      ",
+            )
+            click.echo(desc)
+
             if not ok:
                 selected_skills.discard(s.name)
-                click.echo(f"  ⛔ {s.name} unavailable — {reason}")
+                why = textwrap.fill(
+                    f"Unavailable: {reason}",
+                    width=wrap_width,
+                    initial_indent="      ",
+                    subsequent_indent="      ",
+                )
+                click.echo(why)
                 continue
 
             default = s.name in selected_skills
-            use = click.confirm(f"Use skill '{s.name}'? — {s.description}", default=default)
+            use = click.confirm("      Enable this skill?", default=default)
             if use:
                 selected_skills.add(s.name)
             else:
                 selected_skills.discard(s.name)
 
-    if with_browser_tools:
-        enable_browser = True
-    elif without_browser_tools:
-        enable_browser = False
-    elif interactive:
-        enable_browser = click.confirm(
-            "Install browser-tools dependencies now? (needed for odoo-ui-check)",
-            default=("odoo-ui-check" in selected_skills),
-        )
-    else:
-        enable_browser = "odoo-ui-check" in selected_skills
+    odoo_ui_enabled = "odoo-ui-check" in selected_skills
+
+    # Keep behavior deterministic:
+    # - if odoo-ui-check is enabled, browser-tools deps are installed
+    # - if odoo-ui-check is not enabled, browser-tools deps are not installed
+    if odoo_ui_enabled and without_browser_tools:
+        raise click.ClickException("odoo-ui-check requires browser-tools dependencies; remove --without-browser-tools.")
+    if (not odoo_ui_enabled) and with_browser_tools:
+        raise click.ClickException("--with-browser-tools is only valid when odoo-ui-check is enabled.")
+
+    enable_browser = odoo_ui_enabled
 
     enable_envrc = False if without_envrc else (click.confirm("Set up recommended local environment (direnv + .venv)?", default=True) if interactive else True)
     enable_local_exclude = add_local_exclude or (click.confirm("Hide local .pi files from git status on this machine?", default=True) if interactive else False)
-    migrate_tools = click.confirm("Archive legacy .pi/tools directory to avoid pi startup warnings?", default=True) if interactive else True
+    migrate_tools = True
 
     if interactive:
         click.echo("\n[summary]")
-        click.echo(f"- Project: {project_dir}")
-        click.echo(f"- Skills to enable ({len(selected_skills)}): {', '.join(sorted(selected_skills)) if selected_skills else '(none)'}")
-        click.echo(f"- Setup env (.envrc/.venv): {'yes' if enable_envrc else 'no'}")
-        click.echo(f"- Install browser-tools deps: {'yes' if enable_browser else 'no'}")
-        click.echo(f"- Add local git exclude (.pi/): {'yes' if enable_local_exclude else 'no'}")
-        click.echo(f"- Archive legacy .pi/tools: {'yes' if migrate_tools else 'no'}")
-        if not click.confirm("Apply these changes now?", default=True):
+        click.echo(f"  Project\n    {project_dir}")
+
+        click.echo("\n  Skills to enable")
+        if selected_skills:
+            for name in sorted(selected_skills):
+                click.echo(f"    • {name}")
+        else:
+            click.echo("    (none)")
+
+        click.echo("\n  Project command")
+        click.echo("    • Creates .pi/devkit (symlink to this devkit CLI)")
+
+        click.echo("\n  Options")
+        click.echo(f"    Setup env (.envrc/.venv):     {'yes' if enable_envrc else 'no'}")
+        browser_note = "yes (required by odoo-ui-check)" if enable_browser else "no (odoo-ui-check not enabled)"
+        click.echo(f"    Install browser-tools deps:   {browser_note}")
+        click.echo(f"    Add local git exclude (.pi/): {'yes' if enable_local_exclude else 'no'}")
+        click.echo("    Legacy .pi/tools handling:    automatic")
+
+        if not click.confirm("\nApply these changes now?", default=True):
             click.echo("Cancelled. No changes were applied.")
             return
 
@@ -747,7 +833,7 @@ def doctor(project_repo_path: Path | None) -> None:
     if project_repo_path is None:
         if not interactive:
             raise click.ClickException("PROJECT_REPO_PATH is required in non-interactive mode.")
-        project_repo_path = prompt_project_repo_path()
+        project_repo_path = prompt_project_repo_path(root)
 
     project_dir = project_repo_path.expanduser().resolve()
     check_project_repo(project_dir)
@@ -854,12 +940,13 @@ def doctor(project_repo_path: Path | None) -> None:
 @click.option("--yes", is_flag=True, help="Non-interactive mode (accept defaults)")
 def cleanup_cmd(project_repo_path: Path | None, remove_local_exclude: bool, remove_all: bool, yes: bool) -> None:
     """Run cleanup/uninstall flow."""
+    root = devkit_root()
     interactive = sys.stdin.isatty() and not yes and not remove_all
 
     if project_repo_path is None:
         if not interactive:
             raise click.ClickException("PROJECT_REPO_PATH is required in non-interactive mode.")
-        project_repo_path = prompt_project_repo_path()
+        project_repo_path = prompt_project_repo_path(root)
 
     project_dir = project_repo_path.expanduser().resolve()
     check_project_repo(project_dir)
@@ -937,8 +1024,17 @@ def cleanup_cmd(project_repo_path: Path | None, remove_local_exclude: bool, remo
         actions.append(remove_local_exclude_entry(project_dir))
 
     click.echo(f"Uninstall summary for project repo: {project_dir}")
-    for line in actions:
-        click.echo(f"- {line}")
+    visible = [line for line in actions if not line.startswith("SKIP:")]
+    skipped = len(actions) - len(visible)
+
+    if visible:
+        for line in visible:
+            click.echo(f"- {line}")
+    else:
+        click.echo("- Nothing to remove (project already clean).")
+
+    if skipped:
+        click.echo(f"- Skipped unchanged entries: {skipped}")
 
 
 @cli.command()
@@ -959,13 +1055,28 @@ def components() -> None:
     click.echo("Skills:")
     if not skills:
         click.echo("  (none)")
+
+    term_width = shutil.get_terminal_size(fallback=(100, 24)).columns
+    wrap_width = max(50, term_width - 8)
+
     for s in skills:
         ok, reason = evaluate_skill_requirements(s.name, project, manifest)
         if ok:
             mark = "✅" if s.name in enabled else "⬜"
-            click.echo(f"  {mark} {s.name:28} {s.description}")
+            click.echo(f"  {mark} {s.name}")
+            wrapped = textwrap.fill(s.description, width=wrap_width, initial_indent="      ", subsequent_indent="      ")
+            click.echo(wrapped)
         else:
-            click.echo(f"  ⛔ {s.name:28} {s.description}  (unavailable: {reason})")
+            click.echo(f"  ⛔ {s.name}")
+            wrapped = textwrap.fill(s.description, width=wrap_width, initial_indent="      ", subsequent_indent="      ")
+            click.echo(wrapped)
+            why = textwrap.fill(
+                f"Unavailable: {reason}",
+                width=wrap_width,
+                initial_indent="      ",
+                subsequent_indent="      ",
+            )
+            click.echo(why)
 
 
 @cli.command("enable-skill")
