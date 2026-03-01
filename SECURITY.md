@@ -13,7 +13,7 @@ This devkit is intended to be generic and safe to share.
 1. Use placeholders for credentials:
    - `<odoo_login>`, `<odoo_password>`, `<db_name>`
 2. Use generic paths in docs:
-   - `/path/to/odoo-project`, `/path/to/erp-devkit`
+   - `/path/to/odoo-project`, `/path/to/pi-odoo-devkit`
 3. Do not commit generated local data:
    - `.venv/`, `.direnv/`, `node_modules/`
 4. Keep examples vendor-neutral unless explicitly required.
@@ -24,7 +24,7 @@ This devkit is intended to be generic and safe to share.
 Run doctor before sharing or tagging releases:
 
 ```bash
-./bootstrap/doctor.sh /path/to/odoo-project
+./pi-odoo-devkit.sh doctor /path/to/odoo-project
 ```
 
 Doctor includes a content-hygiene check for obvious personal-path/company-specific patterns.

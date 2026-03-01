@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
-import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -22,7 +22,7 @@ def command_exists(name: str) -> bool:
     return shutil.which(name) is not None
 
 
-def resolve_erp_dir(devkit_dir: Path, positional: str | None) -> Path | None:
+def resolve_project_dir(devkit_dir: Path, positional: str | None) -> Path | None:
     if positional:
         return Path(positional).expanduser()
 
@@ -39,17 +39,6 @@ def resolve_erp_dir(devkit_dir: Path, positional: str | None) -> Path | None:
         return cwd
 
     return None
-
-
-def check_symlink(path: Path, expected: Path, name: str) -> CheckResult:
-    if not path.exists() and not path.is_symlink():
-        return CheckResult(name, "FAIL", f"missing: {path}")
-    if not path.is_symlink():
-        return CheckResult(name, "FAIL", f"not a symlink: {path}")
-    actual = path.resolve()
-    if actual != expected.resolve():
-        return CheckResult(name, "WARN", f"points to {actual} (expected {expected})")
-    return CheckResult(name, "PASS", f"ok: {path} -> {actual}")
 
 
 def check_http(url: str, name: str) -> CheckResult:
@@ -69,6 +58,11 @@ def scan_content_hygiene(devkit_dir: Path) -> CheckResult:
         (re.compile(r"/home/[A-Za-z0-9._-]+"), "hardcoded Linux home path"),
         (re.compile(r"~/workspace/"), "hardcoded workspace home shortcut"),
         (re.compile(r"\bphiloro\b", re.IGNORECASE), "company-specific identifier"),
+        (re.compile(r"secret:fernet,", re.IGNORECASE), "encrypted secret marker committed"),
+        (re.compile(r"gAAAAA[0-9A-Za-z_-]{20,}"), "possible fernet token"),
+        (re.compile(r"AKIA[0-9A-Z]{16}"), "possible AWS access key"),
+        (re.compile(r"ghp_[A-Za-z0-9]{20,}"), "possible GitHub token"),
+        (re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"), "possible Slack token"),
     ]
 
     hits: list[str] = []
@@ -85,6 +79,10 @@ def scan_content_hygiene(devkit_dir: Path) -> CheckResult:
 
         # Skip this checker source file (contains regex patterns as literals)
         if path.name == "doctor.py" and path.parent.name == "bootstrap":
+            continue
+
+        # Skip local machine-specific env overrides
+        if path.name == ".envrc.local":
             continue
 
         try:
@@ -112,21 +110,64 @@ def scan_content_hygiene(devkit_dir: Path) -> CheckResult:
     return CheckResult("content-hygiene", "PASS", "No obvious personal paths/company-specific identifiers found")
 
 
+def check_shared_dir(dir_path: Path, name: str) -> CheckResult:
+    if not dir_path.exists():
+        return CheckResult(name, "FAIL", f"missing: {dir_path}")
+    if not dir_path.is_dir():
+        return CheckResult(name, "FAIL", f"not a directory: {dir_path}")
+    items = list(dir_path.iterdir())
+    if not items:
+        return CheckResult(name, "WARN", f"empty directory: {dir_path}")
+    symlink_count = sum(1 for p in items if p.is_symlink())
+    return CheckResult(name, "PASS", f"{len(items)} entries ({symlink_count} symlinks)")
+
+
+def load_skill_manifest(devkit_dir: Path) -> dict:
+    manifest_path = devkit_dir / "skills" / "manifest.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def evaluate_skill_requirements(skill_name: str, project_dir: Path, manifest: dict) -> tuple[bool, str]:
+    entry = manifest.get(skill_name, {})
+    req = entry.get("requirements", {}) if isinstance(entry, dict) else {}
+
+    reasons: list[str] = []
+    for rel in req.get("project_files", []):
+        if not (project_dir / rel).exists():
+            reasons.append(f"missing file: {rel}")
+    for rel in req.get("project_dirs", []):
+        p = project_dir / rel
+        if not p.exists() or not p.is_dir():
+            reasons.append(f"missing directory: {rel}")
+    for cmd in req.get("commands", []):
+        if not command_exists(cmd):
+            reasons.append(f"missing command: {cmd}")
+
+    if reasons:
+        return False, "; ".join(reasons)
+    return True, ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Doctor checks for Odoo devkit setup.")
     parser.add_argument("project_repo_path", nargs="?", help="Path to Odoo project repo")
     args = parser.parse_args()
 
     devkit_dir = Path(__file__).resolve().parent.parent
-    project_dir_raw = resolve_erp_dir(devkit_dir, args.project_repo_path)
+    project_dir_raw = resolve_project_dir(devkit_dir, args.project_repo_path)
     if not project_dir_raw:
         print("Could not resolve Odoo project repo path.")
         parser.print_help()
         return 1
 
-    erp_dir = project_dir_raw.expanduser().resolve()
-    if not erp_dir.exists() or not (erp_dir / "docker-compose.yml").exists():
-        print(f"Invalid Odoo project repo path: {erp_dir}")
+    project_dir = project_dir_raw.expanduser().resolve()
+    if not project_dir.exists() or not (project_dir / "docker-compose.yml").exists():
+        print(f"Invalid Odoo project repo path: {project_dir}")
         return 1
 
     results: list[CheckResult] = []
@@ -147,33 +188,32 @@ def main() -> int:
         else:
             results.append(CheckResult(f"tool:{tool}", "WARN", "missing optional tool"))
 
-    # Project links
-    results.append(
-        check_symlink(
-            erp_dir / ".pi" / "skills" / "shared-devkit",
-            devkit_dir / "skills",
-            "link:skills/shared-devkit",
-        )
-    )
-    results.append(
-        check_symlink(
-            erp_dir / ".pi" / "tools" / "shared-devkit",
-            devkit_dir / "commands",
-            "link:tools/shared-devkit",
-        )
-    )
+    # Project links/directories
+    skills_dir = project_dir / ".pi" / "skills" / "shared-devkit"
+    tools_dir = project_dir / ".pi" / "tools" / "shared-devkit"
+    results.append(check_shared_dir(skills_dir, "skills:shared-devkit"))
+    results.append(check_shared_dir(tools_dir, "tools:shared-devkit"))
 
-    devkit_cmd = erp_dir / ".pi" / "tools" / "devkit"
+    manifest = load_skill_manifest(devkit_dir)
+    if skills_dir.exists() and skills_dir.is_dir():
+        for p in sorted(skills_dir.iterdir(), key=lambda x: x.name):
+            ok, reason = evaluate_skill_requirements(p.name, project_dir, manifest)
+            if ok:
+                results.append(CheckResult(f"skill:{p.name}:deps", "PASS", "requirements satisfied"))
+            else:
+                results.append(CheckResult(f"skill:{p.name}:deps", "WARN", reason))
+
+    devkit_cmd = project_dir / ".pi" / "tools" / "devkit"
     if devkit_cmd.exists() or devkit_cmd.is_symlink():
-        if devkit_cmd.is_symlink() and devkit_cmd.resolve() == (devkit_dir / "commands" / "dev").resolve():
-            results.append(CheckResult("link:tools/devkit", "PASS", "ok"))
+        if devkit_cmd.is_symlink():
+            results.append(CheckResult("link:tools/devkit", "PASS", f"ok -> {devkit_cmd.resolve()}"))
         else:
-            results.append(CheckResult("link:tools/devkit", "WARN", "exists but not linked to devkit command"))
+            results.append(CheckResult("link:tools/devkit", "WARN", "exists but not a symlink"))
     else:
         results.append(CheckResult("link:tools/devkit", "WARN", "missing"))
 
     # Local include notes
-    notes = erp_dir / ".pi" / "DEVKIT_AGENT_NOTES.md"
+    notes = project_dir / ".pi" / "DEVKIT_AGENT_NOTES.md"
     if notes.exists():
         results.append(CheckResult("notes:DEVKIT_AGENT_NOTES", "PASS", "present"))
     else:
@@ -213,8 +253,7 @@ def main() -> int:
         )
     )
 
-    # Print results
-    print(f"Odoo devkit doctor report\n- devkit: {devkit_dir}\n- project: {erp_dir}\n")
+    print(f"Odoo devkit doctor report\n- devkit: {devkit_dir}\n- project: {project_dir}\n")
 
     fail_count = 0
     warn_count = 0
@@ -231,9 +270,9 @@ def main() -> int:
     print(f"- WARN: {warn_count}")
 
     print("\nSuggested next actions:")
-    print(f"1) Run installer: {devkit_dir}/bootstrap/install.sh {erp_dir} --yes --with-browser-tools")
-    print("2) If using recommended env: cd {0} && direnv allow".format(devkit_dir))
-    print("3) Start local stack: cd {0} && docker compose up -d".format(erp_dir))
+    print(f"1) Run wizard: {devkit_dir}/pi-odoo-devkit.sh wizard {project_dir}")
+    print(f"2) If using recommended env: cd {devkit_dir} && direnv allow")
+    print(f"3) Start local stack: cd {project_dir} && docker compose up -d")
     print("4) Open pi.dev and start in your Odoo project repo")
 
     return 1 if fail_count else 0

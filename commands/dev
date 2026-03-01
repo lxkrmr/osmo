@@ -63,6 +63,11 @@ Commands:
   test [run-tests args...]     Run ./run-tests.sh with forwarded args
   lint [pre-commit args...]    Run pre-commit (defaults to run --all-files)
   doctor                       Run devkit bootstrap doctor checks
+  components                   Show available/enabled devkit skills and commands
+  enable-skill <name>          Enable one skill in current project
+  disable-skill <name>         Disable one skill in current project
+  enable-command <name>        Enable one command in current project
+  disable-command <name>       Disable one command in current project
   new-skill <name>             Scaffold a new skill from template
   help                         Show this help
 
@@ -75,6 +80,10 @@ Examples:
   .pi/tools/dev test -u my_addon
   .pi/tools/dev lint
   .pi/tools/dev doctor
+  .pi/tools/dev components
+  .pi/tools/dev enable-skill browser-tools
+  .pi/tools/dev disable-skill odoo-translate
+  .pi/tools/dev enable-command dev
   .pi/tools/dev new-skill odoo-my-workflow
 EOF
 }
@@ -145,6 +154,255 @@ cmd_doctor() {
   python3 "$DEVKIT_ROOT/bootstrap/doctor.py" "$ROOT_DIR"
 }
 
+cmd_components() {
+  python3 - "$DEVKIT_ROOT" "$ROOT_DIR" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+DEVKIT = Path(sys.argv[1])
+PROJECT = Path(sys.argv[2])
+
+skills_root = DEVKIT / 'skills'
+commands_root = DEVKIT / 'commands'
+manifest_path = skills_root / 'manifest.json'
+manifest = {}
+if manifest_path.exists():
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    except Exception:
+        manifest = {}
+
+enabled_skills_dir = PROJECT / '.pi' / 'skills' / 'shared-devkit'
+enabled_cmds_dir = PROJECT / '.pi' / 'tools' / 'shared-devkit'
+
+def parse_skill_meta(skill_dir: Path):
+    name = skill_dir.name
+    desc = "No description"
+    f = skill_dir / 'SKILL.md'
+    if f.exists():
+        try:
+            lines = f.read_text(encoding='utf-8').splitlines()
+            if lines and lines[0].strip() == '---':
+                i = 1
+                while i < len(lines) and lines[i].strip() != '---':
+                    line = lines[i]
+                    if line.startswith('name:'):
+                        name = line.split(':', 1)[1].strip() or name
+                    elif line.startswith('description:'):
+                        desc = line.split(':', 1)[1].strip() or desc
+                    i += 1
+        except Exception:
+            pass
+    return name, desc
+
+def eval_skill(name: str):
+    entry = manifest.get(name, {})
+    req = entry.get('requirements', {}) if isinstance(entry, dict) else {}
+    reasons = []
+    for rel in req.get('project_files', []):
+        if not (PROJECT / rel).exists():
+            reasons.append(f"missing file: {rel}")
+    for rel in req.get('project_dirs', []):
+        p = PROJECT / rel
+        if not p.exists() or not p.is_dir():
+            reasons.append(f"missing directory: {rel}")
+    for cmd in req.get('commands', []):
+        if not shutil.which(cmd):
+            reasons.append(f"missing command: {cmd}")
+    if reasons:
+        return False, '; '.join(reasons)
+    return True, ''
+
+import shutil
+
+all_skills = []
+for d in sorted(skills_root.iterdir(), key=lambda p: p.name):
+    if d.is_dir() and not d.name.startswith('_') and (d / 'SKILL.md').exists():
+        n, desc = parse_skill_meta(d)
+        ok, reason = eval_skill(n)
+        all_skills.append((n, desc, ok, reason))
+
+enabled_skills = set()
+if enabled_skills_dir.exists() and enabled_skills_dir.is_dir():
+    enabled_skills = {p.name for p in enabled_skills_dir.iterdir()}
+
+available_cmds = []
+for p in sorted(commands_root.iterdir(), key=lambda p: p.name):
+    if p.is_file() and p.name != 'README.md' and os.access(p, os.X_OK):
+        available_cmds.append((p.name, 'Helper command'))
+
+enabled_cmds = set()
+if enabled_cmds_dir.exists() and enabled_cmds_dir.is_dir():
+    enabled_cmds = {p.name for p in enabled_cmds_dir.iterdir()}
+
+print("\n🧰 Pi Odoo Devkit Components")
+print(f"Project: {PROJECT}")
+print(f"Devkit:  {DEVKIT}\n")
+
+print("Skills:")
+for name, desc, ok, reason in all_skills:
+    if ok:
+        mark = '✅' if name in enabled_skills else '⬜'
+        print(f"  {mark} {name:28} {desc}")
+    else:
+        print(f"  ⛔ {name:28} {desc}  (unavailable: {reason})")
+if not all_skills:
+    print("  (none)")
+
+print("\nCommands:")
+for name, desc in available_cmds:
+    mark = '✅' if name in enabled_cmds else '⬜'
+    print(f"  {mark} {name:28} {desc}")
+if not available_cmds:
+    print("  (none)")
+
+print("\nTips:")
+print("  - Re-run wizard to change selection:")
+print(f"    {DEVKIT}/pi-odoo-devkit.sh wizard {PROJECT}")
+print("  - Run health checks:")
+print("    ./.pi/tools/devkit doctor")
+PY
+}
+
+_link_entry() {
+  local src="$1"
+  local dst="$2"
+
+  mkdir -p "$(dirname "$dst")"
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    rm -rf "$dst"
+  fi
+  ln -s "$src" "$dst"
+}
+
+cmd_enable_skill() {
+  local name="${1:-}"
+  if [ -z "$name" ]; then
+    echo "Usage: .pi/tools/dev enable-skill <skill-name>" >&2
+    return 1
+  fi
+
+  local src="$DEVKIT_ROOT/skills/$name"
+  local marker="$src/SKILL.md"
+  local dst="$ROOT_DIR/.pi/skills/shared-devkit/$name"
+
+  if [ ! -f "$marker" ]; then
+    echo "Skill not found in devkit: $name" >&2
+    return 1
+  fi
+
+  local check
+  check="$(python3 - "$DEVKIT_ROOT" "$ROOT_DIR" "$name" <<'PY'
+import json
+import shutil
+import sys
+from pathlib import Path
+
+DEVKIT = Path(sys.argv[1])
+PROJECT = Path(sys.argv[2])
+NAME = sys.argv[3]
+
+manifest = {}
+mp = DEVKIT / 'skills' / 'manifest.json'
+if mp.exists():
+    try:
+        manifest = json.loads(mp.read_text(encoding='utf-8'))
+    except Exception:
+        manifest = {}
+
+entry = manifest.get(NAME, {})
+req = entry.get('requirements', {}) if isinstance(entry, dict) else {}
+reasons = []
+for rel in req.get('project_files', []):
+    if not (PROJECT / rel).exists():
+        reasons.append(f"missing file: {rel}")
+for rel in req.get('project_dirs', []):
+    p = PROJECT / rel
+    if not p.exists() or not p.is_dir():
+        reasons.append(f"missing directory: {rel}")
+for cmd in req.get('commands', []):
+    if not shutil.which(cmd):
+        reasons.append(f"missing command: {cmd}")
+
+if reasons:
+    print('FAIL:' + '; '.join(reasons))
+else:
+    print('OK')
+PY
+)"
+
+  if [[ "$check" == FAIL:* ]]; then
+    echo "Cannot enable skill '$name' (${check#FAIL:})" >&2
+    return 1
+  fi
+
+  _link_entry "$src" "$dst"
+  echo "✅ Enabled skill: $name"
+}
+
+cmd_disable_skill() {
+  local name="${1:-}"
+  if [ -z "$name" ]; then
+    echo "Usage: .pi/tools/dev disable-skill <skill-name>" >&2
+    return 1
+  fi
+
+  local dst="$ROOT_DIR/.pi/skills/shared-devkit/$name"
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    rm -rf "$dst"
+    echo "✅ Disabled skill: $name"
+  else
+    echo "Skill already disabled: $name"
+  fi
+}
+
+cmd_enable_command() {
+  local name="${1:-}"
+  if [ -z "$name" ]; then
+    echo "Usage: .pi/tools/dev enable-command <command-name>" >&2
+    return 1
+  fi
+
+  local src="$DEVKIT_ROOT/commands/$name"
+  local dst="$ROOT_DIR/.pi/tools/shared-devkit/$name"
+
+  if [ ! -x "$src" ]; then
+    echo "Command not found/executable in devkit: $name" >&2
+    return 1
+  fi
+
+  _link_entry "$src" "$dst"
+  echo "✅ Enabled command: $name"
+
+  if [ "$name" = "dev" ]; then
+    _link_entry "$ROOT_DIR/.pi/tools/shared-devkit/dev" "$ROOT_DIR/.pi/tools/devkit"
+    echo "✅ Refreshed convenience link: .pi/tools/devkit"
+  fi
+}
+
+cmd_disable_command() {
+  local name="${1:-}"
+  if [ -z "$name" ]; then
+    echo "Usage: .pi/tools/dev disable-command <command-name>" >&2
+    return 1
+  fi
+
+  if [ "$name" = "dev" ]; then
+    echo "Refusing to disable 'dev' via this command. Use installer/uninstall if needed." >&2
+    return 1
+  fi
+
+  local dst="$ROOT_DIR/.pi/tools/shared-devkit/$name"
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    rm -rf "$dst"
+    echo "✅ Disabled command: $name"
+  else
+    echo "Command already disabled: $name"
+  fi
+}
+
 cmd_new_skill() {
   local name="${1:-}"
   if [ -z "$name" ]; then
@@ -206,6 +464,11 @@ case "$cmd" in
   test) cmd_test "$@" ;;
   lint) cmd_lint "$@" ;;
   doctor) cmd_doctor "$@" ;;
+  components) cmd_components "$@" ;;
+  enable-skill) cmd_enable_skill "$@" ;;
+  disable-skill) cmd_disable_skill "$@" ;;
+  enable-command) cmd_enable_command "$@" ;;
+  disable-command) cmd_disable_command "$@" ;;
   new-skill) cmd_new_skill "$@" ;;
   help|-h|--help) usage ;;
   *)

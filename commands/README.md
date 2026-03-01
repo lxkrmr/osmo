@@ -1,36 +1,25 @@
-# Dev Commands
+# Dev Command Backend
 
-Shared helper scripts for local Odoo development.
+`commands/dev` is the internal command backend used by `pi-odoo-devkit.sh`.
 
-## Recommended usage (from Odoo project repo)
-
-After running `bootstrap/install.sh`, use:
+For normal usage, prefer the main entrypoint:
 
 ```bash
-./.pi/tools/devkit help
+./pi-odoo-devkit.sh --help
 ```
 
-Main commands:
+From an Odoo project repo, you can also use the linked helper:
 
-- `./.pi/tools/devkit up`
-- `./.pi/tools/devkit db`
-- `./.pi/tools/devkit shell [db_name]`
-- `./.pi/tools/devkit test [args...]`
-- `./.pi/tools/devkit lint [args...]`
+```bash
+./.pi/tools/devkit --help
+```
+
+Useful commands:
+
+- `./.pi/tools/devkit components` (shows available/unavailable skills with reasons)
 - `./.pi/tools/devkit doctor`
+- `./.pi/tools/devkit enable-skill <name>`
+- `./.pi/tools/devkit disable-skill <name>`
+- `./.pi/tools/devkit enable-command <name>`
+- `./.pi/tools/devkit disable-command <name>`
 - `./.pi/tools/devkit new-skill <skill-name>`
-
-## Direct usage (without installer)
-
-You can also run directly from this repo by passing the project path:
-
-```bash
-ODOO_REPO_PATH=/path/to/odoo-project /path/to/erp-devkit/commands/dev help
-```
-
-
-## Notes
-
-- `shell` uses `--no-http` to avoid conflicts with Odoo on `8069`.
-- `db` reads DB config from `docker/odoo_base.conf` + `docker/odoo_local.conf`.
-- If local `psql` is missing, `db` falls back to container `psql`.

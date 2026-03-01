@@ -34,7 +34,7 @@ This skill builds on `browser-tools` and is focused on Odoo-specific checks.
    - `http://localhost:8069`
 3. Ensure browser-tools dependencies are installed (from devkit root):
    ```bash
-   ./bootstrap/install.sh --with-browser-tools --yes
+   ./pi-odoo-devkit.sh wizard /path/to/odoo-project --yes --with-browser-tools
    ```
 4. Ensure browser-tools CDP is reachable:
    ```bash

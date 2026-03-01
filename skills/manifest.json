@@ -1,0 +1,18 @@
+{
+  "odoo-addon-lifecycle": {
+    "requirements": {
+      "project_files": [
+        "tools/octo"
+      ]
+    },
+    "note": "Requires octo CLI in the Odoo project repository."
+  },
+  "odoo-translate": {
+    "requirements": {
+      "project_files": [
+        "tools/octo"
+      ]
+    },
+    "note": "Requires octo translation tooling in the Odoo project repository."
+  }
+}

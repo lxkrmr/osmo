@@ -19,7 +19,7 @@ Use this as a lightweight, repeatable checklist when validating a UI change or b
 
 - Local stack running: `docker compose up -d`
 - Odoo reachable: `http://localhost:8069`
-- Browser-tools deps installed: `./bootstrap/install.sh --with-browser-tools --yes`
+- Browser-tools deps installed: `./pi-odoo-devkit.sh wizard /path/to/odoo-project --yes --with-browser-tools`
 - Browser CDP reachable: `curl -s http://localhost:9222/json/version`
 
 ## Step 1 — Define Check Matrix (before clicking)

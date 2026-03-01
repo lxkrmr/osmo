@@ -7,9 +7,11 @@ description: Guide for creating new devkit skills with consistent structure, saf
 
 _This skill follows `templates/SKILL.md` conventions._
 
-Use this skill when someone wants to add a new skill to `erp-devkit`.
+Use this skill when someone wants to add a new skill to `pi-odoo-devkit`.
 
 ## Decide First: Skill vs Command
+
+Keep root agent docs (`AGENTS.md` / `CLAUDE.md`) lean. Put workflow-specific rules into skills.
 
 Create a **skill** when:
 
@@ -38,12 +40,14 @@ Create a **command** when:
    ```
 2. Fill frontmatter:
    - `name`
-   - `description`
-3. Replace placeholders in all sections.
-4. Add concrete copy-paste commands.
-5. Add/keep `Credential Hygiene` section.
-6. If relevant, add dependencies (tools/scripts/skills) explicitly.
-7. Run doctor/basic checks and review for path/secret safety.
+   - `description` (must explain why the skill is useful/needed)
+3. Add a short "why this helps" sentence near the top of the skill body.
+4. Replace placeholders in all sections.
+5. Add concrete copy-paste commands.
+6. Add/keep `Credential Hygiene` section.
+7. If relevant, add dependencies (tools/scripts/skills) explicitly.
+8. If skill depends on project-specific files/tools, add requirement rules to `skills/manifest.json`.
+9. Run doctor/basic checks and review for path/secret safety.
 
 ## Quality Checklist
 
@@ -56,6 +60,7 @@ Before considering a skill done, verify:
 - [ ] Validation section exists (user-run commands)
 - [ ] Troubleshooting section exists
 - [ ] Skill is narrow and non-overlapping with existing skills
+- [ ] Dependencies are declared in `skills/manifest.json` when needed
 
 ## Validation (User-Run)
 

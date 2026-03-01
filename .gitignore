@@ -1,2 +1,5 @@
 .venv/
 .direnv/
+.envrc.local
+node_modules/
+**/node_modules/

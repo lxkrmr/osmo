@@ -1,136 +1,128 @@
-# Odoo Devkit (repository: `erp-devkit`)
+# Pi Odoo Devkit (repository: `pi-odoo-devkit`)
 
-Shared skills and helper commands for local Odoo development and agentic coding workflows.
+A toolbox for **agentic coding in Odoo with pi.dev**.
+
+It provides Pi-oriented skills, setup wizards, health checks, and component management to keep local Odoo development workflows consistent and low-friction.
+
+## Main entrypoint
+
+Use the toolbox command:
+
+```bash
+./pi-odoo-devkit.sh --help
+```
+
+Primary subcommands:
+
+- `wizard` — guided setup/reconfiguration
+- `doctor` — health + dependency + hygiene checks
+- `components` — show available/enabled skills and commands
+- `enable-skill` / `disable-skill`
+- `enable-command` / `disable-command`
+- `new-skill` — scaffold new skill from template
+- `cleanup` — guided uninstall/cleanup
 
 ## Repository layout
 
 - `skills/` — reusable skills (for Pi users)
-- `commands/` — helper CLI scripts (useful for all team members)
-  - includes `dev new-skill <name>` scaffold helper
+  - includes `skills/manifest.json` for dependency-based availability rules
+- `commands/` — helper command implementation
 - `templates/` — templates for creating new skills
-- `bootstrap/install.py` — main installer (interactive + non-interactive)
-- `bootstrap/install.sh` — shell wrapper around `install.py`
-- `bootstrap/doctor.py` / `bootstrap/doctor.sh` — setup diagnostics
-- `bootstrap/uninstall.py` / `bootstrap/uninstall.sh` — cleanup
+- `bootstrap/install.py` — wizard implementation backend
+- `bootstrap/doctor.py` — diagnostics backend
+- `bootstrap/uninstall.py` — cleanup backend
 - `THIRD_PARTY.md` + `LICENSES/` — attribution and license texts
 - `SECURITY.md` — security/privacy authoring rules
 
 ## Recommended setup (direnv + .venv)
 
-This devkit recommends a local Python environment managed by `direnv`:
+The wizard can set up a local Python environment managed by `direnv`:
 
 - `.envrc` at devkit root
 - `.venv` for Python tooling isolation
-- `commands/` added to PATH via `.envrc`
+- optional `.envrc.local` (stores `ODOO_REPO_PATH`)
 
-Installer can create this automatically.
-
-## Install into an Odoo project checkout
+## Install / Reconfigure (wizard)
 
 ```bash
-# from devkit repo
-./bootstrap/install.sh /path/to/odoo-project
+# interactive wizard (recommended for newcomers)
+./pi-odoo-devkit.sh wizard /path/to/odoo-project
 ```
 
-Or with environment variable:
+Wizard mode guides users through:
+- dependency checks,
+- project path confirmation,
+- skill selection (with descriptions and availability checks),
+- command selection,
+- optional browser-tools dependencies,
+- optional local git exclude,
+- optional local env setup.
+
+Non-interactive example:
 
 ```bash
-ODOO_REPO_PATH=/path/to/odoo-project ./bootstrap/install.sh
+./pi-odoo-devkit.sh wizard /path/to/odoo-project --yes --with-browser-tools --add-local-exclude --set-project-env
 ```
 
-
-### Optional: hide local `.pi` files from git status (local-only)
-
-Use installer opt-in flag:
+Or using environment variable:
 
 ```bash
-./bootstrap/install.sh /path/to/odoo-project --add-local-exclude
+ODOO_REPO_PATH=/path/to/odoo-project ./pi-odoo-devkit.sh wizard
 ```
 
-This adds `.pi/` to `<project>/.git/info/exclude` (not committed, local machine only).
-
-### Browser tools batteries included
-
-`browser-tools` code is vendored under:
-
-- `skills/browser-tools/browser-tools/`
-
-Installer can install runtime deps (`npm install`) and report missing dependencies.
-
-## What installer sets up
+## What wizard sets up
 
 Links in project repo:
 
-- `.pi/skills/shared-devkit -> <devkit>/skills`
-- `.pi/tools/shared-devkit  -> <devkit>/commands`
-- `.pi/tools/devkit         -> <devkit>/commands/dev` (if free)
+- `.pi/skills/shared-devkit/` (selected skills as symlinks)
+- `.pi/tools/shared-devkit/` (selected commands as symlinks)
+- `.pi/tools/devkit` → main devkit entrypoint (`pi-odoo-devkit.sh`)
 
 Additional local support file:
 
 - `.pi/DEVKIT_AGENT_NOTES.md`
 
-This helps users integrate devkit guidance manually into existing `AGENTS.md` / `CLAUDE.md`.
-Installer is non-invasive and does **not** edit those files automatically.
+Installer is non-invasive and does **not** edit `AGENTS.md` / `CLAUDE.md` automatically.
 
-Optional setup:
+Recommendation: keep `AGENTS.md` / `CLAUDE.md` lean and put workflow-specific rules into skills.
 
-- add `.pi/` to local git exclude
-- create `.envrc` + `.venv`
-- install browser-tools npm dependencies
+## Component management after setup
 
-## Install options
+From project repo:
 
 ```bash
-./bootstrap/install.sh --help
+./.pi/tools/devkit components
+./.pi/tools/devkit enable-skill browser-tools
+./.pi/tools/devkit disable-skill odoo-translate
 ```
-
-Key options:
-
-- `--add-local-exclude`
-- `--with-browser-tools` / `--without-browser-tools`
-- `--without-envrc`
-- `--yes` (non-interactive with recommended defaults)
 
 ## Doctor checks
 
 ```bash
-./bootstrap/doctor.sh /path/to/odoo-project
+./pi-odoo-devkit.sh doctor /path/to/odoo-project
 ```
 
-Doctor checks tool availability, symlinks, env setup status, browser-tools deps, and local runtime reachability hints (`:8069`, `:9222`).
+Doctor checks:
+- tool availability,
+- enabled skill dependency requirements,
+- runtime reachability hints (`:8069`, `:9222`),
+- content hygiene for obvious secret/path leakage.
 
-## Uninstall / cleanup
-
-```bash
-./bootstrap/uninstall.sh /path/to/odoo-project
-```
-
-Optional local git exclude cleanup:
+## Cleanup
 
 ```bash
-./bootstrap/uninstall.sh /path/to/odoo-project --remove-local-exclude
+# guided cleanup
+./pi-odoo-devkit.sh cleanup /path/to/odoo-project
+
+# full cleanup
+./pi-odoo-devkit.sh cleanup /path/to/odoo-project --all --remove-local-exclude
 ```
 
 Cleanup removes only devkit-managed links/files; existing custom local `.pi` files remain untouched.
 
-## Works with different directory hierarchies
-
-No hardcoded absolute paths are required. Provide project path explicitly if your repos are not siblings.
-
-Examples:
-
-```bash
-# sibling layout (example only)
-/path/to/odoo-project
-/path/to/erp-devkit
-
-# custom layout
-/path/a/odoo-project
-/path/b/erp-devkit
-./bootstrap/install.sh /path/a/odoo-project
-```
-
 ## Credits
 
-Browser tooling is adapted from Mario Zechner's `pi-skills` project.
+- Built for **pi.dev** agentic coding workflows.
+- Browser tooling is adapted from Mario Zechner's `pi-skills` project.
+
 See `THIRD_PARTY.md` and `LICENSES/`.
