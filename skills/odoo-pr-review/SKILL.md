@@ -22,6 +22,10 @@ Use this skill when you want a structured PR review process where the developer 
    - One small step at a time with explicit confirmation.
 5. **Intent before judgment**
    - Understand ticket intent/constraints before evaluating code quality.
+6. **Evidence must be explicit**
+   - For every must-fix / should-fix finding, include a concrete code snippet in Markdown code fences.
+   - Never rely on implicit references like “this logic” without showing the exact lines.
+   - Prefer `path + snippet + issue + impact + suggestion` over prose-only findings.
 
 ## When to Use
 
@@ -98,6 +102,8 @@ Chrome / Chromium / Edge:
    - Trace inheritance/override chains where relevant.
 5. **Build findings with evidence**
    - Separate facts, assumptions, and open questions.
+   - Quote exact code snippets for each finding (and proposed snippet when suggesting a fix).
+   - Include file paths with every snippet.
 6. **Draft feedback**
    - Provide must-fix / should-fix / positive notes.
 7. **Reviewer submits final decision**
@@ -141,15 +147,44 @@ Use this structure when sharing findings with the reviewer:
 1. **Intent Summary**
    - What the PR tries to achieve (validated against ticket context).
 2. **Critical Findings (must-fix)**
-   - Path + issue + impact + concrete suggestion.
+   - For each finding, use:
+     - **Path**
+     - **Current code snippet**
+     - **Issue**
+     - **Impact**
+     - **Suggested change** (include snippet when possible)
 3. **Important Suggestions (should-fix)**
-   - Non-blocking but valuable improvements.
+   - Same evidence format as must-fix findings.
 4. **Positive Notes**
    - What is done well and should be kept.
 5. **Open Questions**
    - What needs clarification from author/reviewer.
 6. **Suggested Final Review Commands (reviewer-run)**
    - Provide options only.
+
+### Finding Template (Markdown, explicit evidence)
+
+````md
+### <Short finding title>
+
+**Path:** `path/to/file.py`
+
+**Current code:**
+```python
+# exact relevant snippet
+```
+
+**Issue:**
+<what is wrong or risky>
+
+**Impact:**
+<why this matters>
+
+**Suggested change:**
+```python
+# concrete alternative (if applicable)
+```
+````
 
 ## Reviewer-Run Command Options
 
