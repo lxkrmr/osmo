@@ -25,14 +25,29 @@ export DB_PASSWORD=<odoo_password>
 
 ## Steps
 
-### 0. Fresh instance only: update German translation terms in UI
+### 0. Fresh instance only: update German translation terms first (mandatory)
 
-After a new local DB/init, update terms once in Odoo UI before exporting:
+After a new local DB/init, refresh terms once before the first export.
 
-- Settings → Translations → Application Terms → **Load a Translation** / **Update Terms**
-- Language: `German / de_DE`
+UI path (fresh DB, recommended):
 
-If this is skipped, exported `de.po` may be incomplete.
+- Settings → **Manage Languages**
+- Open language: **German (de_DE)**
+- Click **Update**
+
+This is the key step that repopulates terms so existing translations are preserved in later `de.po` exports.
+
+CLI fallback (equivalent term refresh for installed modules):
+
+```bash
+docker compose exec -T odoo odoo shell --no-http -d postgres <<'PY'
+mods = env['ir.module.module'].search([('state', '=', 'installed')])
+mods._update_translations(['de_DE'], overwrite=False)
+print(f"Updated de_DE terms for {len(mods)} installed modules")
+PY
+```
+
+If this step is skipped, `translation download` may produce a very incomplete `de.po` on fresh DBs.
 
 ### 1. Download translations from Odoo
 
@@ -65,6 +80,11 @@ For each empty `msgstr` in `addons/custom/<addon_name>/i18n/de.po`:
 - **Identical in EN/DE** (e.g., "Material", "Status") → leave `msgstr ""` empty
 - **Needs translation** → provide German translation
 
+Notes:
+
+- `from-existing` reuses known translations; it does **not** invent new domain-specific wording.
+- After fresh DB exports, custom business labels can still remain empty and must be translated manually.
+
 When editing, verify placeholders and formatting are preserved:
 
 - `%s`, `%d`, `%(name)s`
@@ -86,10 +106,19 @@ Report:
   - Ensure addon exists and is installed in target DB.
 - **`de_DE` missing**
   - Install German language in Odoo first.
-- **Exported file misses expected translations**
-  - In Odoo UI, run Translation Terms update for `de_DE` (Load/Update Terms), then export again.
+- **Exported file misses expected translations / many empty `msgstr` on fresh DB**
+  - Run Step 0 first (Manage Languages → German → Update, or CLI fallback), then export again.
+  - Run `from-existing` afterwards to recover known terms.
+  - Manually translate remaining business-specific labels.
+  - Avoid importing/updating translations from a `de.po` that already contains empty `msgstr` for your target labels, otherwise DB terms can be overwritten with blanks.
 - **Connection/auth errors**
   - Ensure Odoo is running and env vars (`DATABASE`, `DB_USER`, `DB_PASSWORD`) are correct.
+
+## Octolib improvement idea
+
+- This fresh-DB language-update prerequisite should ideally be automated in octolib.
+- Suggested enhancement: before `translation download`, detect whether `de_DE` terms are populated and, if needed, trigger a safe term refresh (or prompt with a guided command).
+- Goal: avoid exporting `de.po` files with unintended empty `msgstr` values and reduce manual UI dependency.
 
 ## Credential Hygiene
 
