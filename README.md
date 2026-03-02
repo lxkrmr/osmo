@@ -106,6 +106,7 @@ Current shared skills in this devkit:
 - `odoo-translate`
 - `odoo-ui-check`
 - `skill-authoring`
+- `web-lookup`
 
 Browser JS helpers used by `odoo-ui-check` are in:
 
