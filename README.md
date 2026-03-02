@@ -98,6 +98,7 @@ Current shared skills in this devkit:
 
 - `dev-workbench`
 - `local-db`
+- `semantic-commit-message`
 - `odoo-addon-lifecycle`
 - `odoo-log-debug`
 - `odoo-pr-review`

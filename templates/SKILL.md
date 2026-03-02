@@ -1,6 +1,8 @@
 ---
 name: <skill-name>
 description: <one-line purpose>
+command: <optional /skill:... shortcut>
+example: <optional usage example>
 ---
 
 # <Skill Title>

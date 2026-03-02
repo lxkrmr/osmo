@@ -25,6 +25,8 @@ class SkillMeta:
     name: str
     path: Path
     description: str
+    command: str = ""
+    example: str = ""
 
 
 @dataclass
@@ -210,6 +212,16 @@ def preflight_checks() -> list[str]:
     return rows
 
 
+def _frontmatter_value(line: str, key: str) -> str | None:
+    prefix = f"{key}:"
+    if not line.startswith(prefix):
+        return None
+    value = line.split(":", 1)[1].strip()
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        value = value[1:-1]
+    return value
+
+
 def parse_skill_meta(skill_dir: Path) -> SkillMeta | None:
     skill_file = skill_dir / "SKILL.md"
     if not skill_file.exists():
@@ -217,6 +229,8 @@ def parse_skill_meta(skill_dir: Path) -> SkillMeta | None:
 
     description = "No description provided."
     name = skill_dir.name
+    command = ""
+    example = ""
     try:
         text = skill_file.read_text(encoding="utf-8")
         lines = text.splitlines()
@@ -224,15 +238,19 @@ def parse_skill_meta(skill_dir: Path) -> SkillMeta | None:
             i = 1
             while i < len(lines) and lines[i].strip() != "---":
                 line = lines[i]
-                if line.startswith("name:"):
-                    name = line.split(":", 1)[1].strip() or name
-                elif line.startswith("description:"):
-                    description = line.split(":", 1)[1].strip() or description
+                if (v := _frontmatter_value(line, "name")) is not None:
+                    name = v or name
+                elif (v := _frontmatter_value(line, "description")) is not None:
+                    description = v or description
+                elif (v := _frontmatter_value(line, "command")) is not None:
+                    command = v
+                elif (v := _frontmatter_value(line, "example")) is not None:
+                    example = v
                 i += 1
     except Exception:
         pass
 
-    return SkillMeta(name=name, path=skill_dir, description=description)
+    return SkillMeta(name=name, path=skill_dir, description=description, command=command, example=example)
 
 
 def discover_skills(root: Path) -> list[SkillMeta]:
@@ -1012,6 +1030,28 @@ def run_tui(root: Path, project_dir: Path) -> None:
                 put(y, content_x, f"Path: skills/{selected.meta.name}")
                 y += 2
 
+                if selected.meta.command and y < details_top + details_h - 1:
+                    put(y, content_x, "Quick command:", curses.A_BOLD)
+                    y += 1
+                    for line in textwrap.wrap(selected.meta.command, width=content_w):
+                        if y >= details_top + details_h - 1:
+                            break
+                        put(y, content_x, line, curses.color_pair(6) | curses.A_BOLD)
+                        y += 1
+                    if y < details_top + details_h - 1:
+                        y += 1
+
+                if selected.meta.example and y < details_top + details_h - 1:
+                    put(y, content_x, "Example:", curses.A_BOLD)
+                    y += 1
+                    for line in textwrap.wrap(selected.meta.example, width=content_w):
+                        if y >= details_top + details_h - 1:
+                            break
+                        put(y, content_x, line)
+                        y += 1
+                    if y < details_top + details_h - 1:
+                        y += 1
+
                 put(y, content_x, "Description:", curses.A_BOLD)
                 y += 1
                 for line in textwrap.wrap(selected.meta.description, width=content_w):
@@ -1590,10 +1630,22 @@ def components() -> None:
             click.echo(f"  {mark} {s.name}")
             wrapped = textwrap.fill(s.description, width=wrap_width, initial_indent="      ", subsequent_indent="      ")
             click.echo(wrapped)
+            if s.command:
+                cmd = textwrap.fill(f"Command: {s.command}", width=wrap_width, initial_indent="      ", subsequent_indent="      ")
+                click.echo(cmd)
+            if s.example:
+                ex = textwrap.fill(f"Example: {s.example}", width=wrap_width, initial_indent="      ", subsequent_indent="      ")
+                click.echo(ex)
         else:
             click.echo(f"  ⛔ {s.name}")
             wrapped = textwrap.fill(s.description, width=wrap_width, initial_indent="      ", subsequent_indent="      ")
             click.echo(wrapped)
+            if s.command:
+                cmd = textwrap.fill(f"Command: {s.command}", width=wrap_width, initial_indent="      ", subsequent_indent="      ")
+                click.echo(cmd)
+            if s.example:
+                ex = textwrap.fill(f"Example: {s.example}", width=wrap_width, initial_indent="      ", subsequent_indent="      ")
+                click.echo(ex)
             why = textwrap.fill(
                 f"Unavailable: {reason}",
                 width=wrap_width,
