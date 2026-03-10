@@ -45,3 +45,5 @@ Rules for the coding agent in this repository.
   - quote line
   - first `---` separator
 - In short: newest log entry always goes at the top of the log stack.
+- Write logs as personal prose, not checklist-style bullet dumps.
+- Include reflection (what I thought/felt/learned) and keep it entertaining.
