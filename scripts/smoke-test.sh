@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PY="$ROOT/.venv/bin/python"
-CLI="$ROOT/pi_odoo_skill_manager.py"
+CLI="$ROOT/osmo.py"
 CHECKER="$ROOT/scripts/check-skills-consistency.py"
 
 if [ ! -x "$PY" ]; then
