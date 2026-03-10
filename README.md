@@ -2,6 +2,20 @@
 
 Lean local helper for managing pi skills in Odoo projects.
 
+## Principles
+
+- One clear setup path (KISS)
+- Deterministic checks for agents and humans
+- Shared skills stay consistent across docs, manifest, and defaults
+
+## Developer setup (one path)
+
+```bash
+./scripts/bootstrap.sh
+./scripts/install-git-hooks.sh
+./scripts/smoke-test.sh
+```
+
 ## TUI-first usage
 
 Run the devkit without arguments:
@@ -116,6 +130,10 @@ Browser JS helpers used by `odoo-ui-check` are in:
 ```bash
 ./scripts/smoke-test.sh
 ```
+
+Smoke uses `.venv/bin/python` and checks:
+- CLI help/guardrails
+- skill metadata consistency (`skills/`, manifest, docs, defaults)
 
 ## Local git hook (recommended)
 
