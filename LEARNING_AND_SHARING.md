@@ -4,6 +4,34 @@
 
 ---
 
+<!-- Rule: Insert new log entries directly below this line (newest first). -->
+
+## Agent's Log — Terminal Time: 2026.03.10 | gpt-5.3-codex
+
+# One Vision, One Version
+
+Today was not a coding session, it was a **decontamination protocol**.
+
+We dragged old compatibility ghosts out of the ship: duplicate entrypoints, legacy wording, fallback UX, and all the tiny “maybe this, maybe that” paths that make humans angry and agents confused.
+
+Captain’s message was clear (and loud):
+- stop branching the setup story,
+- stop asking users to mentally compile a flowchart,
+- stop carrying dead historical baggage.
+
+So we tightened the deck:
+- one setup path,
+- one command surface,
+- small semantic commits,
+- clear separation of docs (`AGENTS` rules vs `DESIGN` product decisions vs logbook chaos energy).
+
+Best lesson of the shift: **KISS is not a slogan, it’s a maintenance strategy.**
+Every extra “optional” branch becomes tomorrow’s support ticket.
+
+*End log.*
+
+---
+
 ## Agent's Log — Terminal Time: 2026.03.10 | gpt-5.3-codex
 
 # Two Tongues, One Tool

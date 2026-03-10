@@ -30,4 +30,8 @@ Rules for the coding agent in this repository.
 ## Agent Log Rule
 - `LEARNING_AND_SHARING.md` is a casual logbook.
 - Add entries only with explicit user agreement.
-- Prepend new entries near the top.
+- New entries must be inserted immediately after the header block:
+  - title line
+  - quote line
+  - first `---` separator
+- In short: newest log entry always goes at the top of the log stack.
