@@ -1,6 +1,6 @@
 # Skills (`skills/`)
 
-This devkit currently exposes shared Odoo development skills, including:
+This skill manager currently exposes shared Odoo development skills, including:
 
 - `semantic-commit-message`
 - `dev-workbench`

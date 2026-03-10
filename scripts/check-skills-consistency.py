@@ -77,8 +77,8 @@ def main() -> int:
     if stale_manifest:
         errors.append(f"manifest has non-existing skills: {sorted(stale_manifest)}")
 
-    root_readme = extract_skill_list(ROOT / "README.md", "Current shared skills in this devkit:")
-    skills_readme = extract_skill_list(SKILLS_DIR / "README.md", "This devkit currently exposes shared Odoo development skills, including:")
+    root_readme = extract_skill_list(ROOT / "README.md", "Current shared skills in this skill manager:")
+    skills_readme = extract_skill_list(SKILLS_DIR / "README.md", "This skill manager currently exposes shared Odoo development skills, including:")
 
     if root_readme != discovered:
         errors.append(

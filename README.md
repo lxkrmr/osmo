@@ -96,22 +96,20 @@ The TUI is primary. Command mode is still available:
 After setup, use the project entrypoint:
 
 ```bash
-./.pi/devkit
+./.pi/skill-manager
 ```
-
-(`.pi/devkit` is the stable project entrypoint.)
 
 ## How installation works (important)
 
-The devkit installs skills into your project via **symlinks** (not file copies).
+The skill manager installs skills into your project via **symlinks** (not file copies).
 
 - project entrypoint symlink:
-  - `<odoo-project>/.pi/devkit` → `<devkit-root>/pi-odoo-skill-manager.py`
+  - `<odoo-project>/.pi/skill-manager` → `<skill-manager-root>/pi-odoo-skill-manager.py`
 - shared skills symlink directory:
-  - `<odoo-project>/.pi/skills/shared-devkit/<skill>` → `<devkit-root>/skills/<skill>`
+  - `<odoo-project>/.pi/skills/shared-skill-manager/<skill>` → `<skill-manager-root>/skills/<skill>`
 
 Why this is useful:
-- one source of truth in the devkit repo
+- one source of truth in the skill manager repo
 - instant skill updates across linked projects
 - easy cleanup/uninstall
 
@@ -121,7 +119,7 @@ Local hygiene behavior:
 
 ## Included skills
 
-Current shared skills in this devkit:
+Current shared skills in this skill manager:
 
 - `dev-workbench`
 - `local-db`
