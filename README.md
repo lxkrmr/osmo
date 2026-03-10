@@ -19,7 +19,26 @@ Lean local helper for managing pi skills in Odoo projects.
 
 Target feel: keyboard-first, readable, calm defaults, strong feedback loops.
 
-## Developer setup (one path)
+## Install (one way)
+
+Use `pipx` for global command installation.
+
+```bash
+pipx ensurepath
+pipx install --editable .
+```
+
+Update:
+```bash
+pipx upgrade pi-odoo-skill-manager
+```
+
+Uninstall:
+```bash
+pipx uninstall pi-odoo-skill-manager
+```
+
+## Developer setup (repo-local)
 
 ```bash
 ./scripts/bootstrap.sh
@@ -32,7 +51,7 @@ Target feel: keyboard-first, readable, calm defaults, strong feedback loops.
 Run the skill manager without arguments:
 
 ```bash
-./pi-odoo-skill-manager.py
+pi-odoo-skill-manager
 ```
 
 This opens the interactive TUI (default experience).
@@ -66,7 +85,7 @@ The tool resolves your Odoo project path by:
 You can clear saved path with:
 
 ```bash
-./pi-odoo-skill-manager.py reset-project-path
+pi-odoo-skill-manager reset-project-path
 ```
 
 ## Doctor is actionable
@@ -81,14 +100,16 @@ Use quick `x` for in-TUI guidance, and `X` when you want the full report.
 
 ## Command mode (secondary)
 
-The TUI is primary. Command mode is still available:
+The TUI is primary. Command mode is agent-friendly for deterministic automation:
 
 ```bash
-./pi-odoo-skill-manager.py --help
-./pi-odoo-skill-manager.py ui [PROJECT_REPO_PATH]
-./pi-odoo-skill-manager.py wizard [PROJECT_REPO_PATH]
-./pi-odoo-skill-manager.py doctor [PROJECT_REPO_PATH]
-./pi-odoo-skill-manager.py cleanup [PROJECT_REPO_PATH]
+pi-odoo-skill-manager --help
+pi-odoo-skill-manager ui [PROJECT_REPO_PATH]
+pi-odoo-skill-manager wizard [PROJECT_REPO_PATH]
+pi-odoo-skill-manager doctor [PROJECT_REPO_PATH]
+pi-odoo-skill-manager doctor [PROJECT_REPO_PATH] --output json
+pi-odoo-skill-manager doctor --describe --output json
+pi-odoo-skill-manager cleanup [PROJECT_REPO_PATH]
 ```
 
 ## From your Odoo project
