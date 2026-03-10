@@ -1187,6 +1187,56 @@ def cli() -> None:
     """Pi Odoo Skill Manager CLI."""
 
 
+@cli.command("help")
+@OUTPUT_OPTION
+def help_cmd(output_mode: str) -> None:
+    """Show CLI command overview (supports JSON output)."""
+    command = "help"
+    commands = sorted(cli.commands.keys())
+
+    details: list[dict[str, object]] = []
+    for name in commands:
+        cmd = cli.commands[name]
+        params: list[dict[str, object]] = []
+        for p in cmd.params:
+            if isinstance(p, click.Option):
+                params.append(
+                    {
+                        "kind": "option",
+                        "name": p.name,
+                        "opts": list(p.opts),
+                        "required": p.required,
+                    }
+                )
+            elif isinstance(p, click.Argument):
+                params.append(
+                    {
+                        "kind": "argument",
+                        "name": p.name,
+                        "required": p.required,
+                        "nargs": p.nargs,
+                    }
+                )
+
+        details.append(
+            {
+                "name": name,
+                "summary": (cmd.help or "").strip().splitlines()[0] if cmd.help else "",
+                "automation_relevant": bool(COMMAND_SPECS.get(name, {}).get("automation_relevant", False)),
+                "supports_dry_run": bool(COMMAND_SPECS.get(name, {}).get("supports_dry_run", False)),
+                "params": params,
+            }
+        )
+
+    data = {
+        "commands": commands,
+        "automation_commands": sorted(COMMAND_SPECS.keys()),
+        "details": details,
+    }
+    text_lines = ["Available commands:", *(f"- {name}" for name in commands)]
+    _emit_success(command, output_mode, data=data, text_lines=text_lines)
+
+
 @cli.command("ui")
 @click.argument("project_repo_path", required=False, type=click.Path(path_type=Path))
 def ui_cmd(project_repo_path: Path | None) -> None:

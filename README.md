@@ -177,6 +177,7 @@ The TUI is primary. Command mode is agent-friendly for deterministic automation:
 
 ```bash
 osmo --help
+osmo help --output json
 osmo ui [PROJECT_REPO_PATH]
 osmo wizard [PROJECT_REPO_PATH]
 osmo doctor [PROJECT_REPO_PATH]
