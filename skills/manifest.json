@@ -1,19 +1,11 @@
 {
-  "odoo-addon-lifecycle": {
+  "odoo-otto": {
     "requirements": {
-      "project_files": [
-        "tools/octo"
+      "commands": [
+        "otto"
       ]
     },
-    "note": "Requires octo CLI in the Odoo project repository."
-  },
-  "odoo-translate": {
-    "requirements": {
-      "project_files": [
-        "tools/octo"
-      ]
-    },
-    "note": "Requires octo translation tooling in the Odoo project repository."
+    "note": "Requires the global otto command and completed otto setup."
   },
   "odoo-log-debug": {
     "requirements": {

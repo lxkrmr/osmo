@@ -494,8 +494,7 @@ def default_selection(all_skills: list[SkillMeta], available_skill_names: set[st
         "dev-workbench",
         "local-db",
         "odoo-shell-debug",
-        "odoo-addon-lifecycle",
-        "odoo-translate",
+        "odoo-otto",
         "odoo-ui-check",
         "skill-authoring",
     }
