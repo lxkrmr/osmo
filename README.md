@@ -19,14 +19,53 @@ Lean local helper for managing pi skills in Odoo projects.
 
 Target feel: keyboard-first, readable, calm defaults, strong feedback loops.
 
-## Install (one way)
+## Requirements
 
-Use `pipx` for global command installation.
+- `python3` (with `venv`)
+- `direnv`
+- `pipx`
+
+Install `direnv` with your OS package manager (examples):
+- macOS (Homebrew): `brew install direnv`
+- Ubuntu/Debian: `sudo apt-get update && sudo apt-get install -y direnv`
+- Fedora: `sudo dnf install -y direnv`
+- Arch: `sudo pacman -S direnv`
+- Windows: `winget install direnv.direnv` (or `choco install direnv` / `scoop install direnv`)
+
+If `pipx` is missing:
 
 ```bash
-pipx ensurepath
-pipx install --editable .
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
 ```
+
+## Recommended setup workflow (one way)
+
+Run this exact sequence after cloning:
+
+```bash
+# 1) install the CLI globally (isolated via pipx)
+pipx install --editable .
+
+# 2) create repo-local venv and install deps
+./scripts/bootstrap.sh
+
+# 3) enable auto-activation of .venv for this repo
+direnv allow
+
+# 4) install local git hooks
+./scripts/install-git-hooks.sh
+
+# 5) verify setup
+./scripts/smoke-test.sh
+```
+
+Why this is the recommended path:
+- `pipx` makes `pi-odoo-skill-manager` available in your shell `PATH` everywhere, so humans and agents can call the same command consistently.
+- `pipx` isolates the CLI in its own environment, preventing global Python package conflicts.
+- `bootstrap.sh` keeps repo dependencies inside `.venv`, so installs do not leak into system Python.
+- `direnv allow` auto-activates `.venv` whenever you enter the repo, including new terminals (no manual re-activation step).
+- hooks + smoke provide deterministic quality gates before commits.
 
 Update:
 ```bash
@@ -38,12 +77,40 @@ Uninstall:
 pipx uninstall pi-odoo-skill-manager
 ```
 
-## Developer setup (repo-local)
+### Daily workflow
+
+```bash
+cd /path/to/pi-odoo-skill-manager
+# direnv auto-activates .venv
+./scripts/smoke-test.sh
+pi-odoo-skill-manager
+```
+
+If dependencies change (`requirements.txt` updates), rerun:
 
 ```bash
 ./scripts/bootstrap.sh
-./scripts/install-git-hooks.sh
-./scripts/smoke-test.sh
+```
+
+## Human + Agent workflow (same command surface)
+
+Why this matters:
+- Humans and agents should run the same executable: `pi-odoo-skill-manager`.
+- This avoids “works in one shell, fails in another” issues.
+- It keeps automation deterministic.
+
+Human-first (interactive):
+
+```bash
+pi-odoo-skill-manager
+```
+
+Agent-first (deterministic CLI):
+
+```bash
+pi-odoo-skill-manager doctor /path/to/odoo-project --output json
+pi-odoo-skill-manager cleanup /path/to/odoo-project --dry-run --output json
+pi-odoo-skill-manager doctor --describe --output json
 ```
 
 ## TUI-first usage
@@ -125,7 +192,7 @@ After setup, use the project entrypoint:
 The skill manager installs skills into your project via **symlinks** (not file copies).
 
 - project entrypoint symlink:
-  - `<odoo-project>/.pi/skill-manager` → `<skill-manager-root>/pi-odoo-skill-manager.py`
+  - `<odoo-project>/.pi/skill-manager` → `<skill-manager-root>/pi_odoo_skill_manager.py`
 - shared skills symlink directory:
   - `<odoo-project>/.pi/skills/shared-skill-manager/<skill>` → `<skill-manager-root>/skills/<skill>`
 

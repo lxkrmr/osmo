@@ -13,5 +13,6 @@ fi
 
 echo "Bootstrap complete."
 echo "Next steps:"
-echo "  1) ./scripts/install-git-hooks.sh"
-echo "  2) ./scripts/smoke-test.sh"
+echo "  1) direnv allow"
+echo "  2) ./scripts/install-git-hooks.sh"
+echo "  3) ./scripts/smoke-test.sh"
