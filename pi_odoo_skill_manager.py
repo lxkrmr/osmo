@@ -877,7 +877,7 @@ def run_tui(root: Path, project_dir: Path) -> None:
 
         selected_idx = 0
         scroll = 0
-        messages = ["Ready. Use ↑/↓ and Enter."]
+        messages = ["Ready."]
 
         def log(msgs: list[str] | str) -> None:
             nonlocal messages
@@ -890,9 +890,9 @@ def run_tui(root: Path, project_dir: Path) -> None:
                 if not s:
                     continue
                 if s.lower().startswith(("cannot", "missing", "error", "failed")):
-                    normalized.append(f"⚠ {s}")
+                    normalized.append(f"WARN: {s}")
                 elif s.lower().startswith(("enabled", "disabled", "created", "updated", "linked", "installed", "added", "removed")):
-                    normalized.append(f"✓ {s}")
+                    normalized.append(f"OK: {s}")
                 else:
                     normalized.append(s)
 
@@ -952,10 +952,10 @@ def run_tui(root: Path, project_dir: Path) -> None:
             available_count = sum(1 for s in statuses if s.available)
             unavailable_count = total - available_count
 
-            title = "🧰 pi-odoo-skill-manager"
+            title = "pi-odoo-skill-manager"
             stats = f"enabled {enabled_count}/{total}  available {available_count}  unavailable {unavailable_count}"
             legend = "● enabled   ○ available   ✕ unavailable"
-            mode = "STACK"
+            mode = "tui"
             put(0, 2, title, curses.color_pair(1) | curses.A_BOLD)
             put(0, 24, f"[{mode}]", curses.color_pair(6) | curses.A_BOLD)
             put(0, max(2, w - len(stats) - 2), stats, curses.color_pair(1))
@@ -983,7 +983,7 @@ def run_tui(root: Path, project_dir: Path) -> None:
                 details_h = max(4, action_y - details_top)
 
             position = f"{selected_idx + 1}/{total}" if total else "0/0"
-            box(body_top, panel_x, skills_h, panel_w, f"Skills {position}")
+            box(body_top, panel_x, skills_h, panel_w, f"skills {position}")
 
             list_top = body_top + 1
             list_height = max(3, skills_h - 2)
@@ -1014,7 +1014,7 @@ def run_tui(root: Path, project_dir: Path) -> None:
             else:
                 put(list_top, panel_x + 1, "No skills found.")
 
-            box(details_top, panel_x, details_h, panel_w, "Details")
+            box(details_top, panel_x, details_h, panel_w, "selected skill")
             if statuses:
                 selected = statuses[selected_idx]
                 y = details_top + 1
@@ -1070,9 +1070,10 @@ def run_tui(root: Path, project_dir: Path) -> None:
                         put(y, content_x, line, curses.color_pair(4))
                         y += 1
 
-            put(action_y, 2, "[Enter] toggle  [e] enable  [d] disable  [s] setup  [c] cleanup  [x] doctor  [X] full doctor  [r] refresh  [q] quit", curses.color_pair(6))
+            put(action_y - 1, 2, "list controls: [j/k] move  [Enter] toggle  [r] refresh  [q] quit", curses.color_pair(6))
+            put(action_y, 2, "use cases: [e] enable  [d] disable  [s] setup  [c] cleanup  [x] doctor  [X] full doctor", curses.color_pair(6))
 
-            box(activity_top, 1, activity_h, max(10, w - 2), "Activity")
+            box(activity_top, 1, activity_h, max(10, w - 2), "status")
             recent_lines = messages[-max(1, activity_h - 2):]
             for i, line in enumerate(recent_lines):
                 put(activity_top + 1 + i, 2, f"• {line}")
@@ -1599,18 +1600,36 @@ def doctor(project_repo_path: Path | None, describe: bool, output_mode: str) -> 
 @click.option("--remove-local-exclude", is_flag=True, help="Remove '.pi/' from <project>/.git/info/exclude if present")
 @click.option("--all", "remove_all", is_flag=True, help="Remove all skill-manager-managed links/files without interactive prompts")
 @click.option("--yes", is_flag=True, help="Non-interactive mode (accept defaults)")
-def cleanup_cmd(project_repo_path: Path | None, remove_local_exclude: bool, remove_all: bool, yes: bool) -> None:
+@click.option("--dry-run", is_flag=True, help="Show planned cleanup actions without modifying files")
+@click.option("--describe", is_flag=True, help="Describe command contract")
+@OUTPUT_OPTION
+def cleanup_cmd(
+    project_repo_path: Path | None,
+    remove_local_exclude: bool,
+    remove_all: bool,
+    yes: bool,
+    dry_run: bool,
+    describe: bool,
+    output_mode: str,
+) -> None:
     """Run cleanup/uninstall flow."""
-    root = devkit_root()
-    interactive = sys.stdin.isatty() and not yes and not remove_all
+    command = "cleanup"
+    if _maybe_describe(command, describe, output_mode):
+        return
 
-    if project_repo_path is None:
-        if not interactive:
-            raise click.ClickException("PROJECT_REPO_PATH is required in non-interactive mode.")
-        project_repo_path = prompt_project_repo_path(root)
+    try:
+        root = devkit_root()
+        interactive = sys.stdin.isatty() and not yes and not remove_all and not dry_run
 
-    project_dir = project_repo_path.expanduser().resolve()
-    check_project_repo(project_dir)
+        if project_repo_path is None:
+            if not interactive:
+                raise click.ClickException("PROJECT_REPO_PATH is required in non-interactive mode.")
+            project_repo_path = prompt_project_repo_path(root)
+
+        project_dir = project_repo_path.expanduser().resolve()
+        check_project_repo(project_dir)
+    except click.ClickException as error:
+        _emit_error(command, output_mode, error, code="validation_error", exit_code=2)
 
     skills_dir = project_dir / ".pi" / "skills" / "shared-skill-manager"
     local_skill_manager = project_dir / ".pi" / "skill-manager"
@@ -1637,57 +1656,70 @@ def cleanup_cmd(project_repo_path: Path | None, remove_local_exclude: bool, remo
 
     actions: list[str] = []
 
-    if remove_skills and skills_dir.exists():
-        if skills_dir.is_dir() and not skills_dir.is_symlink():
-            shutil.rmtree(skills_dir)
-            actions.append(f"REMOVED dir: {skills_dir}")
-        else:
-            skills_dir.unlink()
-            actions.append(f"REMOVED: {skills_dir}")
-    else:
-        actions.append(f"SKIP: {skills_dir}")
+    def _record_or_apply(path: Path, remove_enabled: bool, is_dir_remove: bool = False) -> None:
+        if not remove_enabled:
+            actions.append(f"SKIP: {path}")
+            return
 
-    if remove_skill_manager_link and (local_skill_manager.exists() or local_skill_manager.is_symlink()):
-        local_skill_manager.unlink()
-        actions.append(f"REMOVED: {local_skill_manager}")
-    else:
-        actions.append(f"SKIP: {local_skill_manager}")
+        exists = path.exists() or path.is_symlink()
+        if not exists:
+            actions.append(f"SKIP: {path}")
+            return
+
+        if dry_run:
+            kind = "dir" if (path.is_dir() and not path.is_symlink()) or is_dir_remove else "entry"
+            actions.append(f"PLAN: remove {kind}: {path}")
+            return
+
+        if (path.is_dir() and not path.is_symlink()) or is_dir_remove:
+            shutil.rmtree(path)
+            actions.append(f"REMOVED dir: {path}")
+        else:
+            path.unlink()
+            actions.append(f"REMOVED: {path}")
+
+    _record_or_apply(skills_dir, remove_skills)
+    _record_or_apply(local_skill_manager, remove_skill_manager_link)
 
     if remove_notes and notes.exists():
         text = notes.read_text(encoding="utf-8")
         if "managed-by: skill-manager installer" in text:
-            notes.unlink()
-            actions.append(f"REMOVED: {notes}")
+            _record_or_apply(notes, True)
         else:
             actions.append(f"SKIP: notes file not managed by installer: {notes}")
     else:
         actions.append(f"SKIP: {notes}")
 
-    if remove_legacy_tools and legacy_tools.exists():
-        shutil.rmtree(legacy_tools)
-        actions.append(f"REMOVED dir: {legacy_tools}")
-    else:
-        actions.append(f"SKIP: {legacy_tools}")
+    _record_or_apply(legacy_tools, remove_legacy_tools, is_dir_remove=True)
 
     if remove_skill_manager_backups:
         for p in [legacy_skill_backup, devkit_backups, legacy_tools_backup]:
-            if p.exists():
-                if p.is_dir() and not p.is_symlink():
-                    shutil.rmtree(p)
-                    actions.append(f"REMOVED dir: {p}")
-                else:
-                    p.unlink()
-                    actions.append(f"REMOVED: {p}")
-            else:
-                actions.append(f"SKIP: {p}")
+            _record_or_apply(p, True)
 
     if remove_local_exclude:
-        actions.append(remove_local_exclude_entry(project_dir))
+        if dry_run:
+            actions.append("PLAN: remove '.pi/' from local git exclude")
+        else:
+            actions.append(remove_local_exclude_entry(project_dir))
 
-    click.echo(f"Uninstall summary for project repo: {project_dir}")
     visible = [line for line in actions if not line.startswith("SKIP:")]
     skipped = len(actions) - len(visible)
 
+    if output_mode == OUTPUT_JSON:
+        _emit_success(
+            command,
+            output_mode,
+            data={
+                "project": str(project_dir),
+                "dry_run": dry_run,
+                "actions": actions,
+                "applied": visible,
+                "skipped_count": skipped,
+            },
+        )
+        return
+
+    click.echo(f"Cleanup summary for project repo: {project_dir}")
     if visible:
         for line in visible:
             click.echo(f"- {line}")
@@ -1711,23 +1743,52 @@ def reset_project_path() -> None:
 
 
 @cli.command()
-def components() -> None:
+@click.option("--describe", is_flag=True, help="Describe command contract")
+@OUTPUT_OPTION
+def components(describe: bool, output_mode: str) -> None:
     """Show available/enabled skills from current project."""
-    root = devkit_root()
-    project = resolve_runtime_project_root()
-    skills = discover_skills(root)
-    manifest = load_skill_manifest(root)
+    command = "components"
+    if _maybe_describe(command, describe, output_mode):
+        return
 
-    enabled_dir = project / ".pi" / "skills" / "shared-skill-manager"
-    enabled = {p.name for p in enabled_dir.iterdir()} if enabled_dir.exists() and enabled_dir.is_dir() else set()
+    try:
+        root = devkit_root()
+        project = resolve_runtime_project_root()
+        skills = discover_skills(root)
+        manifest = load_skill_manifest(root)
 
-    click.echo("\n🧰 Pi Odoo Skill Manager Components")
-    click.echo(f"Project: {project}")
-    click.echo(f"Skill manager: {root}\n")
+        enabled_dir = project / ".pi" / "skills" / "shared-skill-manager"
+        enabled = {p.name for p in enabled_dir.iterdir()} if enabled_dir.exists() and enabled_dir.is_dir() else set()
 
-    click.echo("Skills:")
-    if not skills:
-        click.echo("  (none)")
+        if output_mode == OUTPUT_JSON:
+            data = {
+                "project": str(project),
+                "skill_manager_root": str(root),
+                "skills": [],
+            }
+            for s in skills:
+                ok, reason = evaluate_skill_requirements(s.name, project, manifest)
+                data["skills"].append(
+                    {
+                        "name": s.name,
+                        "enabled": s.name in enabled,
+                        "available": ok,
+                        "reason": reason,
+                        "description": s.description,
+                    }
+                )
+            _emit_success(command, output_mode, data=data)
+            return
+
+        click.echo("\n🧰 Pi Odoo Skill Manager Components")
+        click.echo(f"Project: {project}")
+        click.echo(f"Skill manager: {root}\n")
+
+        click.echo("Skills:")
+        if not skills:
+            click.echo("  (none)")
+    except click.ClickException as error:
+        _emit_error(command, output_mode, error, code="validation_error", exit_code=2)
 
     term_width = shutil.get_terminal_size(fallback=(100, 24)).columns
     wrap_width = max(50, term_width - 8)
@@ -1766,49 +1827,103 @@ def components() -> None:
 
 @cli.command("enable-skill")
 @click.argument("name")
-def enable_skill(name: str) -> None:
+@click.option("--dry-run", is_flag=True, help="Validate skill enable without writing symlink")
+@click.option("--describe", is_flag=True, help="Describe command contract")
+@OUTPUT_OPTION
+def enable_skill(name: str, dry_run: bool, describe: bool, output_mode: str) -> None:
     """Enable one skill in current project."""
-    root = devkit_root()
-    project = resolve_runtime_project_root()
-    src = root / "skills" / name
-    marker = src / "SKILL.md"
-    dst = project / ".pi" / "skills" / "shared-skill-manager" / name
+    command = "enable-skill"
+    if _maybe_describe(command, describe, output_mode):
+        return
 
-    if not marker.exists():
-        raise click.ClickException(f"Skill not found in skill manager: {name}")
+    try:
+        root = devkit_root()
+        project = resolve_runtime_project_root()
+        src = root / "skills" / name
+        marker = src / "SKILL.md"
+        dst = project / ".pi" / "skills" / "shared-skill-manager" / name
 
-    manifest = load_skill_manifest(root)
-    ok, reason = evaluate_skill_requirements(name, project, manifest)
-    if not ok:
-        raise click.ClickException(f"Cannot enable skill '{name}' ({reason})")
+        if not marker.exists():
+            raise click.ClickException(f"Skill not found in skill manager: {name}")
 
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.exists() or dst.is_symlink():
-        if dst.is_dir() and not dst.is_symlink():
-            shutil.rmtree(dst)
-        else:
-            dst.unlink()
-    dst.symlink_to(src)
+        manifest = load_skill_manifest(root)
+        ok, reason = evaluate_skill_requirements(name, project, manifest)
+        if not ok:
+            raise click.ClickException(f"Cannot enable skill '{name}' ({reason})")
 
-    for msg in sanitize_project_skills(project, {name}):
-        click.echo(f"- {msg}")
-    click.echo(f"✅ Enabled skill: {name}")
+        if dry_run:
+            _emit_success(
+                command,
+                output_mode,
+                data={"skill": name, "dry_run": True, "target": str(dst), "source": str(src)},
+                text_lines=[f"OK: dry-run enable-skill '{name}' -> {dst}"],
+            )
+            return
+
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if dst.exists() or dst.is_symlink():
+            if dst.is_dir() and not dst.is_symlink():
+                shutil.rmtree(dst)
+            else:
+                dst.unlink()
+        dst.symlink_to(src)
+
+        hygiene_msgs = sanitize_project_skills(project, {name})
+        _emit_success(
+            command,
+            output_mode,
+            data={"skill": name, "target": str(dst), "hygiene": hygiene_msgs},
+            text_lines=[*(f"- {msg}" for msg in hygiene_msgs), f"✅ Enabled skill: {name}"],
+        )
+    except click.ClickException as error:
+        _emit_error(command, output_mode, error, code="validation_error", exit_code=2)
 
 
 @cli.command("disable-skill")
 @click.argument("name")
-def disable_skill(name: str) -> None:
+@click.option("--dry-run", is_flag=True, help="Validate skill disable without removing symlink")
+@click.option("--describe", is_flag=True, help="Describe command contract")
+@OUTPUT_OPTION
+def disable_skill(name: str, dry_run: bool, describe: bool, output_mode: str) -> None:
     """Disable one skill in current project."""
-    project = resolve_runtime_project_root()
-    dst = project / ".pi" / "skills" / "shared-skill-manager" / name
-    if dst.exists() or dst.is_symlink():
-        if dst.is_dir() and not dst.is_symlink():
-            shutil.rmtree(dst)
+    command = "disable-skill"
+    if _maybe_describe(command, describe, output_mode):
+        return
+
+    try:
+        project = resolve_runtime_project_root()
+        dst = project / ".pi" / "skills" / "shared-skill-manager" / name
+
+        if dry_run:
+            exists = dst.exists() or dst.is_symlink()
+            _emit_success(
+                command,
+                output_mode,
+                data={"skill": name, "dry_run": True, "target": str(dst), "exists": exists},
+                text_lines=[f"OK: dry-run disable-skill '{name}' ({'will remove' if exists else 'already absent'})"],
+            )
+            return
+
+        if dst.exists() or dst.is_symlink():
+            if dst.is_dir() and not dst.is_symlink():
+                shutil.rmtree(dst)
+            else:
+                dst.unlink()
+            _emit_success(
+                command,
+                output_mode,
+                data={"skill": name, "removed": True, "target": str(dst)},
+                text_lines=[f"✅ Disabled skill: {name}"],
+            )
         else:
-            dst.unlink()
-        click.echo(f"✅ Disabled skill: {name}")
-    else:
-        click.echo(f"Skill already disabled: {name}")
+            _emit_success(
+                command,
+                output_mode,
+                data={"skill": name, "removed": False, "target": str(dst)},
+                text_lines=[f"Skill already disabled: {name}"],
+            )
+    except click.ClickException as error:
+        _emit_error(command, output_mode, error, code="validation_error", exit_code=2)
 
 
 @cli.command("new-skill")
