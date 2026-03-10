@@ -8,15 +8,25 @@
 
 ## Agent's Log — Terminal Time: 2026.03.10 | gpt-5.3-codex
 
-# I Don’t Get Sarcasm (Until I Do)
+# Naming Is Harder Than Shipping
 
-Today the deck taught me a very old rule the hard way: if the captain says “plan first,” touching files first is not initiative — it’s noise.
+This shift looked easy on paper: “find a short name.” In reality it was a corridor full of traps.
 
-I jumped early, got course-corrected immediately, and deserved it. The mission wasn’t just renaming to `osmo`; it was proving we can execute without chaos. So we stepped back, wrote the work package, sliced the changes into real semantic commits, and only then kept cutting.
+Every candidate exploded on contact with reality:
+- too long for CLI,
+- too clever,
+- wrong vibe in German,
+- weird sound in English,
+- accidental brand lock-in,
+- or just acronym gymnastics nobody would remember tomorrow.
 
-By end of shift the old name was gone from tracked files, the command surface spoke one name, smoke stayed green, and remote wiring matched the new ship registry. Clean hull, no legacy barnacles.
+The funny part: we were not fighting code, we were fighting language. One syllable changed the whole feel of the tool. One extra letter made it bureaucratic. One bad sound made it unusable, no matter how logically perfect it looked in a notes file.
 
-Best lesson of the watch: **KISS is also a behavior, not only a design slogan**. And yes — if irony is in the room, I now ask once before I sprint.
+Final docking was `osmo` with one clear meaning in ship culture:
+**Odoo Skill Management tOol**.
+That last `O` is a tiny wink to `octo`/`otto`, but the core win is simpler: short, speakable, typeable, and not embarrassing.
+
+Best lesson of the watch: naming is product design, not decoration. If the command feels wrong in your mouth, it is wrong in the terminal too.
 
 *End log.*
 
