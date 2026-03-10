@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pi-odoo-skill-manager"
+version = "0.1.0"
+description = "TUI-first skill manager for sharing and managing Odoo skills in pi projects."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "click==8.1.7",
+]
+
+[project.scripts]
+pi-odoo-skill-manager = "pi_odoo_skill_manager:main"
+
+[tool.setuptools]
+py-modules = ["pi_odoo_skill_manager"]
