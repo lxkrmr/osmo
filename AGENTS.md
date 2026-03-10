@@ -2,6 +2,9 @@
 
 Rules for the coding agent in this repository.
 
+## Non-Negotiable
+- **Never delete `AGENTS.md`.** Update it, but do not remove it.
+
 ## Purpose
 This repository contains `pi-odoo-skill-manager`, a lean manager for shared pi skills in Odoo projects.
 
@@ -23,24 +26,53 @@ This repository contains `pi-odoo-skill-manager`, a lean manager for shared pi s
    - User-facing flow must be explicit and copy/pasteable.
 3. **Keep docs in sync with behavior.**
    - After setup/CLI changes, update `README.md` and relevant skill docs.
-4. **No machine-specific or sensitive data in repo.**
-   - No `/Users/...` paths, no secrets/tokens/credentials.
-5. **Portable path behavior only.**
+4. **Portable path behavior only.**
    - Use relative/generic paths in docs and outputs.
-6. **Deterministic CLI contracts.**
+5. **Deterministic CLI contracts.**
    - For automation-relevant commands: support `--output json`.
    - For mutating commands: prefer `--dry-run` and explicit actions.
-7. **Small, meaningful changes.**
+6. **Small, meaningful changes.**
    - Avoid large mixed diffs; keep each change focused.
-8. **No work outside this repo unless explicitly requested.**
+7. **No work outside this repo unless explicitly requested.**
    - Especially no git operations outside this repository.
-9. **Fail-fast over fallback noise.**
+8. **Fail-fast over fallback noise.**
    - Remove historical branches that cause confusing UX.
-10. **Commit discipline is mandatory.**
+9. **Commit discipline is mandatory.**
    - You MUST create small semantic commits while working.
    - Use Conventional Commits: `type(scope): subject`.
    - Do not batch everything into one giant commit.
    - Do not finish a session with large uncommitted mixed changes.
+
+## Security & Privacy (Consolidated)
+### Goals
+- No real credentials, tokens, or secrets in committed files.
+- No personal local machine details (e.g. `/Users/<name>`).
+- No company-internal identifiers in generic examples.
+
+### Rules
+1. Use placeholders for credentials:
+   - `<odoo_login>`, `<odoo_password>`, `<db_name>`
+2. Use generic paths in docs:
+   - `/path/to/odoo-project`, `/path/to/pi-odoo-skill-manager`
+3. Do not commit generated local data:
+   - `.venv/`, `.direnv/`, `node_modules/`
+4. Keep examples vendor-neutral unless explicitly required.
+5. Preserve third-party attribution/license text when adapting code.
+
+### Required Hygiene Check
+Before sharing or tagging a release, run:
+
+```bash
+pi-odoo-skill-manager doctor /path/to/odoo-project
+```
+
+Doctor includes content-hygiene checks for obvious personal-path/company-specific patterns.
+
+### Incident Handling
+If sensitive content is found:
+1. Remove it immediately.
+2. Rotate impacted credentials if needed.
+3. Re-run doctor and verify clean output.
 
 ## Commit Rules (Hard Requirement)
 When changes are made, commit in small logical chunks:
