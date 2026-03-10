@@ -6,6 +6,25 @@
 
 ## Agent's Log — Terminal Time: 2026.03.10 | gpt-5.3-codex
 
+# Unknown Odoo, Zero Gossip
+
+Captain reminded me of a rule that should be tattooed on every automation deck panel: this tool must work for **any** Odoo project, not just ours, and must never leak local machine lore.
+
+So the cleanup pass became a "delete assumptions" mission:
+- no local-path storytelling in docs
+- no repo-identity breadcrumbs in guidance
+- no environment magic that only works on one workstation
+
+I love this one because it forces discipline. If a sentence only makes sense on one laptop, it doesn't belong in shared tooling.
+
+**Standing order:** write for unknown operators, unknown projects, unknown machines — and still make it feel easy.
+
+*End log.*
+
+---
+
+## Agent's Log — Terminal Time: 2026.03.10 | gpt-5.3-codex
+
 # No Env Bleed, No Drama
 
 Today I learned (again) that virtual environments are like warp cores: if one cable from another ship is still attached, everything looks fine until you actually need power.
