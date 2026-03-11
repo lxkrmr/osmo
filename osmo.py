@@ -647,40 +647,83 @@ def scan_content_hygiene(root: Path) -> tuple[str, str, str]:
     return ("content-hygiene", "PASS", "No obvious personal paths/company-specific identifiers found")
 
 
-def doctor_recommendations(results: list[tuple[str, str, str]], project_dir: Path) -> list[str]:
-    recs: list[str] = []
-    seen: set[str] = set()
+def doctor_recommendations_structured(results: list[tuple[str, str, str]], project_dir: Path) -> list[dict[str, str]]:
+    recs: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
 
-    def add(msg: str) -> None:
-        if msg not in seen:
-            seen.add(msg)
-            recs.append(msg)
+    def add(code: str, severity: str, message: str, next_command: str = "") -> None:
+        key = (code, message, next_command)
+        if key in seen:
+            return
+        seen.add(key)
+        item = {
+            "code": code,
+            "severity": severity,
+            "message": message,
+            "next_command": next_command,
+        }
+        recs.append(item)
 
     for name, status, message in results:
         if status == "PASS":
             continue
 
-        if name == "tool:python3":
-            add("Install python3 and rerun doctor.")
-        elif name == "tool:docker":
-            add("Install/start Docker, then rerun doctor.")
-        elif name in {"tool:node", "tool:npm"}:
-            add("Install Node.js + npm if you use odoo-ui-check/browser-tools.")
-        elif name == "skills:shared-osmo":
-            add(f"Run setup: osmo wizard \"{project_dir}\"")
-        elif name == "skills:collisions":
-            add(f"Clean collisions: osmo cleanup \"{project_dir}\" --all, then rerun setup.")
-        elif name == "skills:invalid-artifacts":
-            add(f"Archive invalid artifacts via setup: osmo wizard \"{project_dir}\"")
-        elif name.startswith("skill:") and name.endswith(":deps"):
-            add(f"Fix skill prerequisites for {name.split(':')[1]}: {message}")
-        elif name == "odoo:web":
-            add("Start Odoo services (e.g. docker compose up -d) and retry.")
-        elif name == "browser:cdp":
-            add("Start Chrome with remote debugging on :9222 if you need UI/browser skills.")
-        elif name == "content-hygiene":
-            add("Review flagged files and replace personal/company-specific hardcoded content.")
+        severity = "error" if status == "FAIL" else "warning"
 
+        if name == "tool:python3":
+            add("install_python3", severity, "Install python3 and rerun doctor.")
+        elif name == "tool:docker":
+            add("install_or_start_docker", severity, "Install/start Docker, then rerun doctor.")
+        elif name in {"tool:node", "tool:npm"}:
+            add("install_node_npm", severity, "Install Node.js + npm if you use odoo-ui-check/browser-tools.")
+        elif name == "skills:shared-osmo":
+            add("run_wizard_setup", severity, "Run setup wizard to install shared skills.", f"osmo wizard \"{project_dir}\"")
+        elif name == "skills:collisions":
+            add(
+                "cleanup_skill_collisions",
+                severity,
+                "Clean colliding entries in .pi/skills and rerun setup.",
+                f"osmo cleanup \"{project_dir}\" --all",
+            )
+        elif name == "skills:invalid-artifacts":
+            add(
+                "archive_invalid_skill_artifacts",
+                severity,
+                "Archive invalid .pi/skills artifacts via setup flow.",
+                f"osmo wizard \"{project_dir}\"",
+            )
+        elif name.startswith("skill:") and name.endswith(":deps"):
+            skill_name = name.split(":")[1]
+            add(
+                "fix_skill_prerequisites",
+                severity,
+                f"Fix prerequisites for skill '{skill_name}': {message}",
+            )
+        elif name == "odoo:web":
+            add("start_odoo_services", severity, "Start Odoo services and retry.", "docker compose up -d")
+        elif name == "browser:cdp":
+            add(
+                "start_chrome_cdp",
+                severity,
+                "Start Chrome with remote debugging on :9222 if you need UI/browser skills.",
+            )
+        elif name == "content-hygiene":
+            add(
+                "review_content_hygiene",
+                severity,
+                "Review flagged files and replace personal/company-specific hardcoded content.",
+            )
+
+    return recs
+
+
+def doctor_recommendations(results: list[tuple[str, str, str]], project_dir: Path) -> list[str]:
+    recs: list[str] = []
+    for item in doctor_recommendations_structured(results, project_dir):
+        if item["next_command"]:
+            recs.append(f"{item['message']} Next: {item['next_command']}")
+        else:
+            recs.append(item["message"])
     return recs
 
 
@@ -1633,6 +1676,7 @@ def doctor(project_repo_path: Path | None, describe: bool, output_mode: str) -> 
         check_project_repo(project_dir)
 
         results, fail_count, warn_count = run_doctor_checks(root, project_dir)
+        recommendations_structured = doctor_recommendations_structured(results, project_dir)
         recs = doctor_recommendations(results, project_dir)
         agent_guidance = build_agent_user_mirror(fail_count, warn_count, recs)
 
@@ -1647,6 +1691,7 @@ def doctor(project_repo_path: Path | None, describe: bool, output_mode: str) -> 
                     for name, status, message in results
                 ],
                 "recommendations": recs,
+                "recommendations_structured": recommendations_structured,
                 "agent_guidance": agent_guidance,
             }
             _emit_success(command, output_mode, data=data)
