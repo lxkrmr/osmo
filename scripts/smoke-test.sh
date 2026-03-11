@@ -28,6 +28,10 @@ echo "[smoke] help"
 "$PY" "$CLI" cleanup --help >/dev/null
 "$PY" "$CLI" reset-project-path --help >/dev/null
 
+echo "[smoke] command contracts"
+"$PY" "$CLI" wizard --describe --output json | "$PY" -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] and d["command"]=="wizard"; assert d["data"]["describe"]["supports_dry_run"] is True'
+"$PY" "$CLI" reset-project-path --describe --output json | "$PY" -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] and d["command"]=="reset-project-path"; assert d["data"]["describe"]["supports_dry_run"] is True'
+
 echo "[smoke] non-interactive path guardrails"
 ENVRC_LOCAL="$ROOT/.envrc.local"
 ENVRC_LOCAL_BAK="$ROOT/.envrc.local.smoke.bak"
@@ -73,5 +77,17 @@ cat >"$TMP_PROJECT/docker-compose.yml" <<'YAML'
 services: {}
 YAML
 "$PY" "$CLI" cleanup "$TMP_PROJECT" --all >/dev/null
+
+echo "[smoke] wizard dry-run json"
+"$PY" "$CLI" wizard "$TMP_PROJECT" --dry-run --output json >/tmp/devkit-smoke.out
+"$PY" -c 'import json; d=json.load(open("/tmp/devkit-smoke.out")); assert d["ok"]; assert d["data"]["dry_run"] is True; assert "skill_changes" in d["data"]'
+if [ -d "$TMP_PROJECT/.pi" ]; then
+  echo "wizard --dry-run must not create .pi directory" >&2
+  exit 1
+fi
+
+echo "[smoke] reset-project-path dry-run json"
+"$PY" "$CLI" reset-project-path --dry-run --output json >/tmp/devkit-smoke.out
+"$PY" -c 'import json; d=json.load(open("/tmp/devkit-smoke.out")); assert d["ok"]; assert d["command"]=="reset-project-path"; assert d["data"]["dry_run"] is True'
 
 echo "[smoke] done"
