@@ -33,8 +33,8 @@ Design a small reusable release-check CLI that can be used by multiple internal 
 3. Build small prototype against osmo + otto use-cases.
 4. Decide: keep internal first vs immediate standalone package.
 
-## Follow-up idea (Odoo-focused)
-- Add a future work package for an `odoo-migration-impact` skill/tool:
-  - detect model/field/view changes,
-  - surface probable migration/data-risk hotspots,
-  - propose minimum required test scope for safe rollout.
+## Follow-up ideas (Odoo-focused)
+- `docs/plans/odoo-migration-impact-work-package.md`
+- `docs/plans/odoo-upgrade-readiness-work-package.md`
+
+Both are expected to align well with `otto` use-cases (see sibling repo context) and should reuse deterministic JSON contract patterns.
