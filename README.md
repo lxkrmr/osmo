@@ -114,8 +114,11 @@ osmo
 Agent-first (deterministic CLI):
 
 ```bash
+osmo wizard /path/to/odoo-project --dry-run --output json
 osmo doctor /path/to/odoo-project --output json
 osmo cleanup /path/to/odoo-project --dry-run --output json
+osmo reset-project-path --dry-run --output json
+osmo wizard --describe --output json
 osmo doctor --describe --output json
 ```
 
@@ -180,10 +183,14 @@ osmo --help
 osmo help --output json
 osmo ui [PROJECT_REPO_PATH]
 osmo wizard [PROJECT_REPO_PATH]
+osmo wizard [PROJECT_REPO_PATH] --dry-run --output json
+osmo wizard --describe --output json
 osmo doctor [PROJECT_REPO_PATH]
 osmo doctor [PROJECT_REPO_PATH] --output json
 osmo doctor --describe --output json
 osmo cleanup [PROJECT_REPO_PATH]
+osmo reset-project-path --dry-run --output json
+osmo reset-project-path --describe --output json
 ```
 
 ## From your Odoo project
