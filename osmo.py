@@ -902,7 +902,7 @@ def run_tui(root: Path, project_dir: Path) -> None:
             unavailable_count = total - available_count
 
             title = "osmo"
-            stats = f"enabled {enabled_count}/{total}  available {available_count}  unavailable {unavailable_count}"
+            stats = f"enabled {enabled_count}/{total} · available {available_count} · unavailable {unavailable_count}"
             legend = "● enabled   ○ available   ✕ unavailable"
             mode = "tui"
             put(0, 2, title, curses.color_pair(1) | curses.A_BOLD)
@@ -1019,10 +1019,10 @@ def run_tui(root: Path, project_dir: Path) -> None:
                         put(y, content_x, line, curses.color_pair(4))
                         y += 1
 
-            put(action_y - 1, 2, "list controls: [j/k] move  [Enter] toggle  [r] refresh  [q] quit", curses.color_pair(6))
-            put(action_y, 2, "use cases: [e] enable  [d] disable  [s] setup  [c] cleanup  [x] doctor  [X] full doctor", curses.color_pair(6))
+            put(action_y - 1, 2, "navigation: [j/k] move  [Enter] toggle  [r] refresh  [q] quit", curses.color_pair(6))
+            put(action_y, 2, "actions: [e] enable  [d] disable  [s] setup  [c] cleanup  [x] doctor  [X] full report", curses.color_pair(6))
 
-            box(activity_top, 1, activity_h, max(10, w - 2), "status")
+            box(activity_top, 1, activity_h, max(10, w - 2), "activity log")
             recent_lines = messages[-max(1, activity_h - 2):]
             for i, line in enumerate(recent_lines):
                 put(activity_top + 1 + i, 2, f"• {line}")
@@ -1045,7 +1045,7 @@ def run_tui(root: Path, project_dir: Path) -> None:
                 selected_idx = max(0, len(statuses) - 1)
                 continue
             if key in (ord("r"),):
-                log("Refreshed.")
+                log("View refreshed.")
                 continue
 
             if not statuses:
@@ -1065,7 +1065,7 @@ def run_tui(root: Path, project_dir: Path) -> None:
             elif key == ord("s"):
                 log(setup_project_quick(root, project_dir))
             elif key == ord("c"):
-                put(h - 1, 2, "Cleanup project skill manager artifacts? [y/N]")
+                put(h - 1, 2, "Cleanup osmo-managed project artifacts? [y/N]")
                 stdscr.refresh()
                 confirm = stdscr.getch()
                 if confirm in (ord("y"), ord("Y")):
