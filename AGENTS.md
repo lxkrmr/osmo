@@ -36,6 +36,9 @@ Rules for the coding agent in this repository.
 8. **Keep mental load O(1).**
    - Prefer one obvious path over multiple alternatives.
    - Reject extra modes/branches that increase operator decision overhead.
+9. **Execute approved multi-step plans end-to-end.**
+   - If the user approves a named step plan, run all steps autonomously.
+   - Do not request per-step permission again unless blocked or requirements changed.
 
 ## Agent Log Rule
 - `LEARNING_AND_SHARING.md` is a casual logbook.
