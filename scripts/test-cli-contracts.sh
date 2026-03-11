@@ -69,4 +69,20 @@ echo "[contract] components reason codes"
 )
 "$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["ok"]; skills=d["data"]["skills"]; assert isinstance(skills,list) and skills; required={"name","enabled","available","reason","reason_code","requirement_failures","description"}; assert required.issubset(skills[0].keys())' "$OUT"
 
+echo "[contract] doctor structured recommendations"
+TMP_DOCTOR="$(mktemp -d)"
+cat >"$TMP_DOCTOR/docker-compose.yml" <<'YAML'
+services: {}
+YAML
+set +e
+"$PY" "$CLI" doctor "$TMP_DOCTOR" --output json >"$OUT"
+DOCTOR_RC=$?
+set -e
+rm -rf "$TMP_DOCTOR"
+if [ "$DOCTOR_RC" -ne 1 ]; then
+  echo "Expected doctor exit code 1 on failing checks, got $DOCTOR_RC" >&2
+  exit 1
+fi
+"$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["ok"]; rs=d["data"]["recommendations_structured"]; assert isinstance(rs,list) and rs; req={"code","severity","message","next_command"}; assert req.issubset(rs[0].keys()); assert any(r["code"] for r in rs)' "$OUT"
+
 echo "[contract] done"
