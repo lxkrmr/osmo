@@ -259,6 +259,7 @@ Browser JS helpers used by `odoo-ui-check` are in:
 Smoke uses `.venv/bin/python` and checks:
 - CLI help/guardrails
 - skill metadata consistency (`skills/`, manifest, docs, defaults)
+- CLI contract behavior (`scripts/test-cli-contracts.sh`)
 
 ## Local git hook (recommended)
 
