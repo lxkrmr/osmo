@@ -41,6 +41,8 @@ Rules for the coding agent in this repository.
    - Do not request per-step permission again unless blocked or requirements changed.
 10. **Call out `pipx` update steps when relevant.**
    - When changes affect installed `osmo` behavior/version, explicitly remind the user to run `pipx upgrade osmo` (or reinstall editable if needed).
+11. **Apply editable `pipx` refresh when requested.**
+   - If user asks for automatic local refresh, run `pipx uninstall osmo` + `pipx install --editable .` at the end of implementation.
 
 ## Agent Log Rule
 - `LEARNING_AND_SHARING.md` is a casual logbook.
