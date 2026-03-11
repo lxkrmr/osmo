@@ -1587,6 +1587,68 @@ def wizard(
     print_agent_doc_guidance(project_dir, notes_path)
 
 
+def _doctor_check_code(name: str) -> str:
+    if name.startswith("tool:"):
+        return "tool_available"
+    if name == "skills:shared-osmo":
+        return "shared_skills_installed"
+    if name == "skills:collisions":
+        return "skill_collisions"
+    if name == "skills:invalid-artifacts":
+        return "invalid_skill_artifacts"
+    if name.startswith("skill:") and name.endswith(":deps"):
+        return "skill_requirements"
+    if name == "odoo:web":
+        return "odoo_web_reachable"
+    if name == "browser:cdp":
+        return "browser_cdp_reachable"
+    if name == "content-hygiene":
+        return "content_hygiene"
+    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+
+
+def _doctor_check_category(name: str) -> str:
+    if name.startswith("tool:"):
+        return "tool"
+    if name.startswith("skills:"):
+        return "skills"
+    if name.startswith("skill:") and name.endswith(":deps"):
+        return "skill"
+    if name.startswith("odoo:"):
+        return "odoo"
+    if name.startswith("browser:"):
+        return "browser"
+    if name == "content-hygiene":
+        return "content"
+    return "general"
+
+
+def _doctor_check_resource(name: str) -> str:
+    if name.startswith("tool:"):
+        return name.split(":", 1)[1]
+    if name.startswith("skill:") and name.endswith(":deps"):
+        return name.split(":")[1]
+    return name
+
+
+def doctor_checks_structured(results: list[tuple[str, str, str]]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for name, status, message in results:
+        severity = "info" if status == "PASS" else ("warning" if status == "WARN" else "error")
+        out.append(
+            {
+                "name": name,
+                "check_code": _doctor_check_code(name),
+                "category": _doctor_check_category(name),
+                "resource": _doctor_check_resource(name),
+                "status": status,
+                "severity": severity,
+                "message": message,
+            }
+        )
+    return out
+
+
 def run_doctor_checks(root: Path, project_dir: Path) -> tuple[list[tuple[str, str, str]], int, int]:
     results: list[tuple[str, str, str]] = []
 
@@ -1676,6 +1738,7 @@ def doctor(project_repo_path: Path | None, describe: bool, output_mode: str) -> 
         check_project_repo(project_dir)
 
         results, fail_count, warn_count = run_doctor_checks(root, project_dir)
+        checks_structured = doctor_checks_structured(results)
         recommendations_structured = doctor_recommendations_structured(results, project_dir)
         recs = doctor_recommendations(results, project_dir)
         agent_guidance = build_agent_user_mirror(fail_count, warn_count, recs)
@@ -1690,6 +1753,7 @@ def doctor(project_repo_path: Path | None, describe: bool, output_mode: str) -> 
                     {"name": name, "status": status, "message": message}
                     for name, status, message in results
                 ],
+                "checks_structured": checks_structured,
                 "recommendations": recs,
                 "recommendations_structured": recommendations_structured,
                 "agent_guidance": agent_guidance,
