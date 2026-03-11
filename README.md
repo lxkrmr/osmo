@@ -217,6 +217,11 @@ You can inspect command scope machine-readably via:
 osmo help --output json
 ```
 
+Look for:
+- `data.contract_version`
+- `data.contract_spec`
+- `data.details[].params[]`
+
 ## From your Odoo project
 
 Use the global `osmo` command (installed via `pipx`):

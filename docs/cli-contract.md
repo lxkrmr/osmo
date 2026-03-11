@@ -102,6 +102,26 @@ osmo help --output json
 ```
 
 Relevant fields:
+- `contract_version` (`v1`)
+- `contract_spec` (`docs/cli-contract.md`)
 - `automation_commands`
 - `non_contract_commands`
 - `details[].contract_scope`
+- `details[].params[]`
+
+`details[].params[]` stable fields:
+- `kind` (`option` | `argument`)
+- `name`
+- `required`
+- `opts` (for `option`)
+- `nargs` (for `argument`)
+
+## Contract evolution / migration policy
+
+- Additive changes (new optional JSON fields) are allowed in `v1`.
+- Renaming/removing existing stable fields requires a new contract version.
+- For a breaking change:
+  1. introduce `v2` in docs,
+  2. update `help --output json` to expose new `contract_version`,
+  3. keep compatibility fields for at least one release when practical,
+  4. update golden snapshots and contract tests in the same change.

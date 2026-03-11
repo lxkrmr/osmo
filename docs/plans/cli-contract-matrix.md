@@ -33,4 +33,4 @@ Outside automation contract by design:
 - `components --output json` exposes stable machine fields: `reason_code` and `requirement_failures[]`.
 - `doctor --output json` exposes `checks_structured[]` with `check_code`, `category`, `resource`, `status`, `severity`, `message`.
 - `doctor --output json` exposes `recommendations_structured[]` with `code`, `severity`, `message`, `next_command` (while keeping legacy `recommendations[]`).
-- Command metadata is exposed via `--describe` and reflected by `osmo help --output json` (`automation_commands`, `non_contract_commands`, `details[].contract_scope`).
+- Command metadata is exposed via `--describe` and reflected by `osmo help --output json` (`contract_version`, `contract_spec`, `automation_commands`, `non_contract_commands`, `details[].contract_scope`, `details[].params[]`).
