@@ -83,6 +83,6 @@ if [ "$DOCTOR_RC" -ne 1 ]; then
   echo "Expected doctor exit code 1 on failing checks, got $DOCTOR_RC" >&2
   exit 1
 fi
-"$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["ok"]; rs=d["data"]["recommendations_structured"]; assert isinstance(rs,list) and rs; req={"code","severity","message","next_command"}; assert req.issubset(rs[0].keys()); assert any(r["code"] for r in rs)' "$OUT"
+"$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["ok"]; rs=d["data"]["recommendations_structured"]; assert isinstance(rs,list) and rs; req={"code","severity","message","next_command"}; assert req.issubset(rs[0].keys()); assert any(r["code"] for r in rs); cs=d["data"]["checks_structured"]; assert isinstance(cs,list) and cs; req2={"name","check_code","category","resource","status","severity","message"}; assert req2.issubset(cs[0].keys()); assert any(c["check_code"]=="shared_skills_installed" for c in cs)' "$OUT"
 
 echo "[contract] done"
