@@ -61,8 +61,11 @@ Rules for the coding agent in this repository.
 17. **Do not modify sibling repos from osmo sessions.**
    - Never edit code in `../erp/` from this repository session.
 18. **osmo scope inside sibling Odoo repo is skill-only.**
-   - In `../erp/`, osmo may only manage skill artifacts under `.pi/`.
+   - In the Odoo workdir, osmo may only manage skill artifacts under `.pi/`.
    - No non-skill changes are allowed in sibling project files.
+19. **Use neutral naming for sibling Odoo repository references.**
+   - In git/docs/messages, do not refer to `../erp/` literally.
+   - Use terms like `Odoo workdir` / `PROJECT_REPO_PATH`.
 
 ## Agent Log Rule
 - `LEARNING_AND_SHARING.md` is a casual logbook.
