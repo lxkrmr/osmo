@@ -193,6 +193,20 @@ osmo reset-project-path --dry-run --output json
 osmo reset-project-path --describe --output json
 ```
 
+### Contract scope (explicit)
+
+Automation contract (JSON/describe/dry-run where mutating):
+- `wizard`, `doctor`, `cleanup`, `components`, `enable-skill`, `disable-skill`, `reset-project-path`
+
+Human-ops commands (intentionally outside automation contract):
+- `ui`, `new-skill`, `up`, `db`, `shell`, `test`, `lint`
+
+You can inspect this split machine-readably via:
+
+```bash
+osmo help --output json
+```
+
 ## From your Odoo project
 
 Use the global `osmo` command (installed via `pipx`):

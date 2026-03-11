@@ -21,7 +21,11 @@ Automation-relevant commands should expose deterministic behavior:
 | `disable-skill` | yes | yes | yes | yes |
 | `reset-project-path` | yes | yes | yes | yes |
 
+## Non-contract commands (explicit)
+Outside automation contract by design:
+- `ui`, `new-skill`, `up`, `db`, `shell`, `test`, `lint`
+
 ## Notes
 - `wizard --dry-run` returns a plan and does not write files.
 - `reset-project-path --dry-run` reports whether `.envrc.local` would be removed.
-- Command metadata is exposed via `--describe` and reflected by `osmo help --output json`.
+- Command metadata is exposed via `--describe` and reflected by `osmo help --output json` (`automation_commands`, `non_contract_commands`, `details[].contract_scope`).

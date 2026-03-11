@@ -32,8 +32,16 @@ Rationale:
 - Human default: `osmo` (TUI)
 - Agent default: JSON-first commands
 - Automation-relevant commands expose `--output json`
-- Mutating commands should support `--dry-run`
+- Mutating automation commands support `--dry-run`
+- Automation-relevant commands expose `--describe`
 - Doctor should return actionable recommendations
+
+### Contract Scope Boundary
+Automation contract commands:
+- `wizard`, `doctor`, `cleanup`, `components`, `enable-skill`, `disable-skill`, `reset-project-path`
+
+Explicit non-contract human-ops commands (no JSON/describe guarantee):
+- `ui`, `new-skill`, `up`, `db`, `shell`, `test`, `lint`
 
 ## Project Integration Model
 - One command surface: global `osmo` CLI (installed via `pipx`)
