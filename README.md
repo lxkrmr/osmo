@@ -142,10 +142,13 @@ osmo
 
 This opens the interactive TUI (default experience).
 
-Layout is stack-based for readability:
-- Skills (top)
-- Details (middle)
-- Activity log (bottom, larger for easier output review)
+Layout is stack-based for readability (otto-like):
+- Mode + filter bar (top)
+- Use-cases hint bar
+- Skills table (count/name/state)
+- Selected skill details
+- Doctor + status panel
+- Status footer
 
 ### TUI keys
 
